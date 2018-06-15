@@ -87,7 +87,7 @@ sudo make install
 cd ..
 
 git clone https://github.com/jadeblaquiere/pbc.git
-cd ecclib
+cd pbc
 autoreconf --install
 case "$OSTYPE" in
   linux*)
