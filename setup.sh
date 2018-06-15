@@ -86,6 +86,21 @@ make
 sudo make install
 cd ..
 
+git clone https://github.com/jadeblaquiere/pbc.git
+cd ecclib
+autoreconf --install
+case "$OSTYPE" in
+  linux*)
+    ./configure --prefix=/usr
+    ;;
+  darwin*)
+    ./configure
+    ;;
+esac
+make
+sudo make install
+cd ..
+
 git clone https://github.com/jadeblaquiere/fspke.git
 cd fspke
 autoreconf --install
