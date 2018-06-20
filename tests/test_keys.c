@@ -37,11 +37,75 @@
 #include <stdlib.h>
 #include <time.h>
 
-START_TEST(test_init_key)
-    ctPrivateKey pvK;
-    ctPublicKey pbK;
+// calculate x**e
+static int64_t _pow_i64(int64_t x, int64_t e) {
+    int64_t r = 1;
+    int64_t i;
 
-    ctPrivateKey_init_GEN(pvK, pbK, 0, 0, 0, 0, 0);
+    assert(e < 64);
+    for (i = 0; i < e; i++) {
+        r *= x;
+    }
+    return r;
+}
+
+START_TEST(test_init_key)
+    ctSecretKey sK;
+    ctPublicKey pK;
+
+    ctSecretKey_init_GEN(sK, 0, 0, 0, 0, 0);
+    ctPublicKey_init_ctSecretKey(pK, sK);
+
+    ctPublicKey_clear(pK);
+    ctSecretKey_clear(sK);
+END_TEST
+
+START_TEST(test_key_intervals)
+    ctSecretKey sK;
+    int64_t maxInterval;
+    int64_t maxTime;
+
+    ctSecretKey_init_GEN(sK, 0, 0, 0, 0, 0);
+
+    assert (_ctSecretKey_interval_for_time(sK, sK->t0 - 1) == -1);
+    assert (_ctSecretKey_interval_for_time(sK, sK->t0) == 0);
+    assert (_ctSecretKey_interval_for_time(sK, sK->t0 + 59999999) == 0);
+    assert (_ctSecretKey_interval_for_time(sK, sK->t0 + 60000000) == 1);
+
+    assert (_ctSecretKey_time_for_interval(sK, 0) == sK->t0);
+    assert (_ctSecretKey_time_for_interval(sK, 1) == (sK->t0 + 60000000));
+
+    // semantic note... the key is defined for all time less than maxTime (or maxInterval)
+    maxInterval = _pow_i64(sK->chk_sec->order, sK->chk_sec->depth);
+    maxTime = (sK->t0) + (sK->tStep * maxInterval);
+    
+    assert (_ctSecretKey_time_for_interval(sK, maxInterval) == maxTime);
+    assert (_ctSecretKey_interval_for_time(sK, maxTime) == maxInterval);
+    assert (_ctSecretKey_interval_for_time(sK, maxTime - 1) == (maxInterval - 1));
+    assert (_ctSecretKey_time_for_interval(sK, maxInterval - 1) == (maxTime - 60000000));
+
+    ctSecretKey_clear(sK);
+END_TEST
+
+// NOTE : While there should be no hardcoded constants (instead it should
+// use sizeof() and sizes defined in library code), there are some basic
+// security assumptions related to the encryption code which rely on ECDLP
+// and similar assumptions to be valid (and hence we assume ~256-bit types).
+START_TEST(test_sizes)
+    ctSecretKey sK;
+    ctPublicKey pK;
+    
+    assert(sizeof(sK->addr_sec) == (32U));
+    assert(sizeof(sK->enc_sec) == (32U));
+    assert(sizeof(sK->sign_sec) == (32U));
+    assert(sizeof(sK->t0) == (8U));
+    assert(sizeof(sK->tStep) == (8U));
+
+    assert(sizeof(pK->addr_pub) == (32U));
+    assert(sizeof(pK->enc_pub) == (32U));
+    assert(sizeof(pK->sign_pub) == (32U));
+    assert(sizeof(pK->t0) == (8U));
+    assert(sizeof(pK->tStep) == (8U));
 END_TEST
 
 static Suite *mpCT_test_suite(void) {
@@ -52,6 +116,8 @@ static Suite *mpCT_test_suite(void) {
     tc = tcase_create("keys");
 
     tcase_add_test(tc, test_init_key);
+    tcase_add_test(tc, test_key_intervals);
+    tcase_add_test(tc, test_sizes);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

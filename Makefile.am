@@ -1,2 +1,5 @@
 ACLOCAL_AMFLAGS=-I m4
-SUBDIRS=src include tests
+if COND_EXAMPLES
+  MAYBE_EXAMPLES = examples
+endif
+SUBDIRS=src include tests $(MAYBE_EXAMPLES)

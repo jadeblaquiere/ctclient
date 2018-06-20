@@ -30,45 +30,73 @@
 
 #include <ciphrtxt/keys.h>
 #include <fspke.h>
+#include <inttypes.h>
+#include <libtasn1.h>
+//#include <portable_endian.h>
 #include <sodium.h>
 #include <stdint.h>
+#include <sys/time.h>
 #include <time.h>
 
 //The default configuration parameters provide for 512 bit prime field with
 //384 bit group order. 
 
-#define CT_DEFAULT_QBITS    (512)
-#define CT_DEFAULT_RBITS    (384)
+#define CT_DEFAULT_QBITS    (512U)
+#define CT_DEFAULT_RBITS    (384U)
 
 //The default configuration parameters provide forward security with granularity
 //of 1 minute (60 seconds) for 16 million (16**6) intervals... or >31 years
 
-#define CT_DEFAULT_DEPTH    (6)
-#define CT_DEFAULT_ORDER    (16)
-#define CT_DEFAULT_TSTEP    (60)
+#define CT_DEFAULT_DEPTH    (6U)
+#define CT_DEFAULT_ORDER    (16U)
+#define CT_DEFAULT_TSTEP    ((60U)*1000000)
 
-//typedef struct {
-//    _ed25519sk  addr_priv;
-//    _ed25519sk  enc_priv;
-//    _ed25519sk  sign_priv;
-//    CHKPKE_t    chk_priv;
-//    int64_t     t0;
-//    int64_t     tStep;
-//} _ctPrivateKey;
+// calculate x**e
+static int64_t _pow_i64(int64_t x, int64_t e) {
+    int64_t r = 1;
+    int64_t i;
 
-void ctPrivateKey_init_GEN(ctPrivateKey pvK, ctPublicKey pbK, int qbits, int rbits, int depth, int order, int64_t tStep) {
-    time_t systime;
+    assert(e < 64);
+    for (i = 0; i < e; i++) {
+        r *= x;
+    }
+    return r;
+}
+
+// negative intervals are always invalid... doesn't matter how negative
+
+int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, int64_t t) {
+    if (t >= sK->t0) {
+        return (t - sK->t0) / sK->tStep;
+    } else {
+        return -1;
+    }
+}
+
+int64_t _ctSecretKey_time_for_interval(ctSecretKey sK, int64_t i) {
+    return sK->t0 + (i * sK->tStep);
+}
+
+int64_t _ctPublicKey_interval_for_time(ctPublicKey pK, int64_t t) {
+    if (t >= pK->t0) {
+        return (t - pK->t0) / pK->tStep;
+    } else {
+        return -1;
+    }
+}
+
+int64_t _ctPublicKey_time_for_interval(ctPublicKey pK, int64_t i) {
+    return pK->t0 + (i * pK->tStep);
+}
+
+void ctSecretKey_init_GEN(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep) {
+    struct timeval tv;
     int qb, rb, d, o;
-    char *chkder;
-    int chkdersz;
 
-    assert(sizeof(pvK->addr_priv) == crypto_scalarmult_ed25519_SCALARBYTES);
-    randombytes_buf(pvK->addr_priv, sizeof(pvK->addr_priv));
-    crypto_scalarmult_base(pbK->addr_pub, pvK->addr_priv);
-    randombytes_buf(pvK->enc_priv, sizeof(pvK->enc_priv));
-    crypto_scalarmult_base(pbK->enc_pub, pvK->enc_priv);
-    randombytes_buf(pvK->sign_priv, sizeof(pvK->sign_priv));
-    crypto_scalarmult_base(pbK->sign_pub, pvK->sign_priv);
+    assert(sizeof(sK->addr_sec) == crypto_scalarmult_ed25519_SCALARBYTES);
+    randombytes_buf(sK->addr_sec, sizeof(sK->addr_sec));
+    randombytes_buf(sK->enc_sec, sizeof(sK->enc_sec));
+    randombytes_buf(sK->sign_sec, sizeof(sK->sign_sec));
 
     if (qbits > 0) {
         qb = qbits;
@@ -94,20 +122,169 @@ void ctPrivateKey_init_GEN(ctPrivateKey pvK, ctPublicKey pbK, int qbits, int rbi
         o = CT_DEFAULT_ORDER;
     }
     
-    CHKPKE_init_Gen(pvK->chk_priv, qb, rb, d, o);
-    chkder = CHKPKE_pubkey_encode_DER(pvK->chk_priv, &chkdersz);
-    CHKPKE_init_pubkey_decode_DER(pbK->chk_pub, chkder, chkdersz);
-    free(chkder);
+    CHKPKE_init_Gen(sK->chk_sec, qb, rb, d, o);
 
     // key is not defined for time before t0
-    systime = time(NULL);
-    pvK->t0 = (int64_t)systime;
-    pbK->t0 = (int64_t)systime;
-    
+    gettimeofday(&tv, NULL);
+    sK->t0 = (1000000 * ((int64_t)tv.tv_sec)) + ((int64_t)tv.tv_usec);
+
     if (tStep > 0) {
-        pvK->tStep = tStep;
-        pbK->tStep = tStep;
+        sK->tStep = tStep;
     } else {
-        pvK->tStep = CT_DEFAULT_TSTEP;
+        sK->tStep = CT_DEFAULT_TSTEP;
     }
+
+    sK->_intervalMin = 0;
+    sK->_intervalMax = _pow_i64((int64_t)o, (int64_t)d);
+}
+
+void ctSecretKey_clear(ctSecretKey sK) {
+    CHKPKE_clear(sK->chk_sec);
+}
+
+static int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, unsigned char *buffer, int len) {
+    int result;
+
+    result = asn1_write_value(root, attribute, buffer, len);
+    //if (result != ASN1_SUCCESS) {
+    //    int i;
+    //    printf("error writing ");
+    //    for (i = 0; i < lwrote; i++) {
+    //        printf("%02X", buffer[i]);
+    //    }
+    //    printf(" to tag : %s\n", attribute);
+    //}
+    assert(result == ASN1_SUCCESS);
+    return 5 + len;
+}
+
+static int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t value) {
+    int nbytes;
+    int result;
+    char *buffer;
+    if (value < 0) {
+        if (value > (-((1ll<<7)-1))) {
+            nbytes = 1;
+        } else if (value > (-((1ll<<15)-1))) {
+            nbytes = 2;
+        } else if (value > (-((1ll<<31)-1))) {
+            nbytes = 4;
+        } else {
+            nbytes = 8;
+        }
+    } else {
+        if (value < (1 << 7)) {
+            nbytes = 1;
+        } else if (value < (1ll << 15)) {
+            nbytes = 2;
+        } else if (value < (1ll << 31)) {
+            nbytes = 4;
+        } else {
+            nbytes = 8;
+        }
+    }
+    buffer = (char *)malloc((nbytes + 2) * sizeof(char));
+    assert(buffer != NULL);
+    sprintf(buffer,"%" PRId64, value);
+    //printf("writing %ld (%s), length %d to %s\n", value, buffer, nbytes, attribute);
+    result = asn1_write_value(root, attribute, buffer, 0);
+    //printf("returned %d\n", result);
+    assert(result == ASN1_SUCCESS);
+    free(buffer);
+    return 5 + nbytes;
+}
+
+extern const asn1_static_node ciphrtxt_asn1_tab[];
+
+unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart, int64_t tEnd, size_t *sz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE sK_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    int result;
+    int length;
+    int sum;
+
+    int64_t iStart, iEnd;
+
+    iStart = _ctSecretKey_interval_for_time(sK, tStart);
+    if (iStart < sK->_intervalMin) return NULL;
+    iEnd = _ctSecretKey_interval_for_time(sK, tEnd);
+    if (iEnd >= sK->_intervalMax) return NULL;
+    if (iEnd < iStart) return NULL;
+
+    sum = 0;
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return NULL;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTSecretKey",
+        &sK_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "addr_sec", sK->addr_sec, sizeof(sK->addr_sec));
+    sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "enc_sec", sK->enc_sec, sizeof(sK->enc_sec));
+    sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "sign_sec", sK->sign_sec, sizeof(sK->sign_sec));
+    buffer = (unsigned char *)CHKPKE_privkey_encode_delegate_DER(sK->chk_sec, iStart, iEnd, &length);
+    if (buffer == NULL) {
+        asn1_delete_structure(&sK_asn1);
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+    sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "chk_sec", buffer, length);
+    sum += _asn1_write_int64_as_integer(sK_asn1, "t0", sK->t0);
+    sum += _asn1_write_int64_as_integer(sK_asn1, "tStep", sK->tStep);
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    sum += 256;  // pad for DER header + some extra just in case
+    length = sum;
+    buffer = (unsigned char *)malloc((sum) * sizeof(char));
+    assert(buffer != NULL);
+    result = asn1_der_coding(sK_asn1, "", (char *)buffer, &length, asnError);
+    if (result != 0) {
+        asn1_delete_structure(&sK_asn1);
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+    assert(length < sum);
+
+    asn1_delete_structure(&sK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    *sz = length;
+    return buffer;
+}
+
+unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, int64_t tStart, size_t *sz) {
+    int64_t tEnd;
+    
+    tEnd = _ctSecretKey_time_for_interval(sK, sK->_intervalMax - 1);
+    return ctSecretKey_Export_FS_Delegate_DER(sK, tStart, tEnd, sz);
+}
+
+void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
+    char *chkder;
+    int chkdersz;
+
+    crypto_scalarmult_base(pK->addr_pub, sK->addr_sec);
+    crypto_scalarmult_base(pK->enc_pub, sK->enc_sec);
+    crypto_scalarmult_base(pK->sign_pub, sK->sign_sec);
+    chkder = CHKPKE_pubkey_encode_DER(sK->chk_sec, &chkdersz);
+    CHKPKE_init_pubkey_decode_DER(pK->chk_pub, chkder, chkdersz);
+    free(chkder);
+    pK->t0 = sK->t0;
+    pK->tStep = sK->tStep;
+}
+
+void ctPublicKey_clear(ctPublicKey pK) {
+    CHKPKE_clear(pK->chk_pub);
 }
