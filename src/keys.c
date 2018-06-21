@@ -35,6 +35,7 @@
 //#include <portable_endian.h>
 #include <sodium.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -287,4 +288,5 @@ void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
 
 void ctPublicKey_clear(ctPublicKey pK) {
     CHKPKE_clear(pK->chk_pub);
+    memset((void *)pK, 0, sizeof(*pK));
 }
