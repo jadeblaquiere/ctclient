@@ -31,6 +31,7 @@
 #include <assert.h>
 #include <ciphrtxt/keys.h>
 #include <gmp.h>
+#include <inttypes.h>
 #include <math.h>
 #include <check.h>
 #include <stdio.h>
@@ -48,6 +49,27 @@ static int64_t _pow_i64(int64_t x, int64_t e) {
     }
     return r;
 }
+
+// NOTE : While good to avoid hardcoded constants (instead it should
+// use sizeof() and sizes defined in library code), there are some basic
+// security assumptions related to the encryption code which rely on ECDLP
+// and similar assumptions to be valid (and hence we assume ~256-bit types).
+START_TEST(test_sizes)
+    ctSecretKey sK;
+    ctPublicKey pK;
+    
+    assert(sizeof(sK->addr_sec) == (32U));
+    assert(sizeof(sK->enc_sec) == (32U));
+    assert(sizeof(sK->sign_sec) == (32U));
+    assert(sizeof(sK->t0) == (8U));
+    assert(sizeof(sK->tStep) == (8U));
+
+    assert(sizeof(pK->addr_pub) == (32U));
+    assert(sizeof(pK->enc_pub) == (32U));
+    assert(sizeof(pK->sign_pub) == (32U));
+    assert(sizeof(pK->t0) == (8U));
+    assert(sizeof(pK->tStep) == (8U));
+END_TEST
 
 START_TEST(test_init_key)
     ctSecretKey sK;
@@ -87,25 +109,49 @@ START_TEST(test_key_intervals)
     ctSecretKey_clear(sK);
 END_TEST
 
-// NOTE : While there should be no hardcoded constants (instead it should
-// use sizeof() and sizes defined in library code), there are some basic
-// security assumptions related to the encryption code which rely on ECDLP
-// and similar assumptions to be valid (and hence we assume ~256-bit types).
-START_TEST(test_sizes)
-    ctSecretKey sK;
-    ctPublicKey pK;
-    
-    assert(sizeof(sK->addr_sec) == (32U));
-    assert(sizeof(sK->enc_sec) == (32U));
-    assert(sizeof(sK->sign_sec) == (32U));
-    assert(sizeof(sK->t0) == (8U));
-    assert(sizeof(sK->tStep) == (8U));
+START_TEST(test_key_export_import)
+    ctSecretKey sK1, sK2;
+    unsigned char *der1, *der2, *chkder1, *chkder2;
+    size_t sz1, sz2;
+    int chksz1, chksz2;
+    int result;
 
-    assert(sizeof(pK->addr_pub) == (32U));
-    assert(sizeof(pK->enc_pub) == (32U));
-    assert(sizeof(pK->sign_pub) == (32U));
-    assert(sizeof(pK->t0) == (8U));
-    assert(sizeof(pK->tStep) == (8U));
+    ctSecretKey_init_GEN(sK1, 0, 0, 0, 0, 0);
+
+    der1 = ctSecretKey_Export_FS_DER(sK1, sK1->t0, &sz1);
+    assert(der1 != NULL);
+    assert(sz1 > 0);
+    //{
+    //    int i
+    //    printf("export DER (%zd bytes) = \n", sz1);
+    //    for (i = 0; i < sz1; i++) {
+    //        printf("%02X", der1[i]);
+    //    }
+    //    printf("\n");
+    //}
+    
+    result = ctSecretKey_init_decode_DER(sK2, der1, sz1);
+    assert(result == 0);
+    assert(memcmp(sK1->addr_sec, sK2->addr_sec, sizeof(sK1->addr_sec)) == 0);
+    assert(memcmp(sK1->enc_sec, sK2->enc_sec, sizeof(sK1->enc_sec)) == 0);
+    assert(memcmp(sK1->sign_sec, sK2->sign_sec, sizeof(sK1->sign_sec)) == 0);
+    assert(sK1->t0 == sK2->t0);
+    assert(sK1->tStep == sK2->tStep);
+    assert(sK1->_intervalMin == sK2->_intervalMin);
+    assert(sK1->_intervalMax == sK2->_intervalMax);
+    
+    chkder1 = (unsigned char *)CHKPKE_privkey_encode_delegate_DER(sK1->chk_sec, sK1->_intervalMin, sK1->_intervalMax - 1, &chksz1);
+    chkder2 = (unsigned char *)CHKPKE_privkey_encode_delegate_DER(sK2->chk_sec, sK2->_intervalMin, sK2->_intervalMax - 1, &chksz2);
+    assert(chksz1 == chksz2);
+    assert(memcmp(chkder1, chkder2, chksz1) == 0);
+
+    der2 = ctSecretKey_Export_FS_DER(sK2, sK2->t0, &sz2);
+    assert(der2 != NULL);
+    assert(sz2 > 0);
+    assert(sz2 == sz1);
+    assert(memcmp(der1, der2, sz1) == 0);
+
+    ctSecretKey_clear(sK1);
 END_TEST
 
 static Suite *mpCT_test_suite(void) {
@@ -118,6 +164,7 @@ static Suite *mpCT_test_suite(void) {
     tcase_add_test(tc, test_init_key);
     tcase_add_test(tc, test_key_intervals);
     tcase_add_test(tc, test_sizes);
+    tcase_add_test(tc, test_key_export_import);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

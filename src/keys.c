@@ -164,11 +164,11 @@ static int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t
     int result;
     char *buffer;
     if (value < 0) {
-        if (value > (-((1ll<<7)-1))) {
+        if (value > (-((1ll << 7 ) - 1))) {
             nbytes = 1;
-        } else if (value > (-((1ll<<15)-1))) {
+        } else if (value > (-((1ll << 15) - 1))) {
             nbytes = 2;
-        } else if (value > (-((1ll<<31)-1))) {
+        } else if (value > (-((1ll << 31) - 1))) {
             nbytes = 4;
         } else {
             nbytes = 8;
@@ -191,6 +191,7 @@ static int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t
     result = asn1_write_value(root, attribute, buffer, 0);
     //printf("returned %d\n", result);
     assert(result == ASN1_SUCCESS);
+    memset((void *)buffer, 0, nbytes);
     free(buffer);
     return 5 + nbytes;
 }
@@ -272,6 +273,159 @@ unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, int64_t tStart, size_t 
     return ctSecretKey_Export_FS_Delegate_DER(sK, tStart, tEnd, sz);
 }
 
+static unsigned char *_asn1_read_octet_string(asn1_node root, char *attribute, size_t *sz) {
+    int result, length, lread;
+    unsigned char *buffer;
+
+    // call read_value with NULL buffer to get length
+    length = 0;
+    result = asn1_read_value(root, attribute, NULL, &length);
+    //printf("result = %d\n", result);
+    if (result != ASN1_MEM_ERROR) return NULL;
+    //assert(result == ASN1_MEM_ERROR);
+    if (length <= 0) return NULL;
+    //assert(length > 0);
+    // allocate
+    buffer = (unsigned char *)malloc((length+1)*sizeof(char));
+    assert(buffer != NULL);
+    lread = length + 1;
+    result = asn1_read_value(root, attribute, (char *)buffer, &lread);
+    if (result != ASN1_SUCCESS) goto cleanup_on_error;
+    //assert(result == 0);
+    if (lread != length) goto cleanup_on_error;
+    //assert(lread == length);
+    *sz = lread;
+    return buffer;
+    
+cleanup_on_error:
+    free(buffer);
+    return NULL;
+}
+
+static int _asn1_read_int64_from_integer(int64_t *value, asn1_node root, char *attribute) {
+    int result, length, lread;
+    uint64_t uvalue = 0;
+    //char *buffer;
+
+    assert(sizeof(int64_t) == 8);
+    // call read_value with NULL buffer to get length
+    length = 0;
+    result = asn1_read_value(root, attribute, NULL, &length);
+    //printf("result = %d\n", result);
+    if (result != ASN1_MEM_ERROR) return -1;
+    //assert(result == ASN1_MEM_ERROR);
+    if (length <= 0) return -1;
+    //assert(length > 0);
+    if (length > sizeof(int64_t)) return -1;
+    lread = sizeof(int64_t);
+    result = asn1_read_value(root, attribute, &uvalue, &lread);
+    if (result != ASN1_SUCCESS) return -1;
+    //assert(result == 0);
+    if (lread != length) return -1;
+    //assert(lread == length);
+    //{
+    //    unsigned char *bytes;
+    //    int i;
+    //
+    //    printf("read %d byte integer as ", length);
+    //    bytes = (unsigned char *)&uvalue;
+    //    for (i = 0; i < length; i++) {
+    //        printf("%02X ", bytes[i]);
+    //    }
+    //    printf(" = %ld\n", (int64_t)uvalue);
+    //}
+    *value = (int64_t)be64toh(uvalue);
+    //printf("value = 0x%016lX\n", *value);
+    if (length < sizeof(int64_t)) {
+        *value >>= ((sizeof(int64_t) - length) * 8) ;
+    }
+    //printf("adjusted value = %ld\n", *value);
+    return 0;
+}
+
+int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE sK_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    size_t  sz;
+    int result;
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return -1;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTSecretKey",
+        &sK_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return -1;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // read DER into ASN1 structure
+    result = asn1_der_decoding(&sK_asn1, der, dsz, asnError);
+    if (result != ASN1_SUCCESS) return -1;
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // Read secret key from ASN1 structure
+    buffer = _asn1_read_octet_string(sK_asn1, "addr_sec", &sz);
+    if (sz != sizeof(sK->addr_sec)) goto error_cleanup1;
+    memcpy((void *)sK->addr_sec, (void *)buffer, sz);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    buffer = _asn1_read_octet_string(sK_asn1, "enc_sec", &sz);
+    if (sz != sizeof(sK->enc_sec)) goto error_cleanup1;
+    memcpy((void *)sK->enc_sec, (void *)buffer, sz);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    buffer = _asn1_read_octet_string(sK_asn1, "sign_sec", &sz);
+    if (sz != sizeof(sK->sign_sec)) goto error_cleanup1;
+    memcpy((void *)sK->sign_sec, (void *)buffer, sz);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    buffer = _asn1_read_octet_string(sK_asn1, "chk_sec", &sz);
+    result = CHKPKE_init_privkey_decode_DER(sK->chk_sec, (char *)buffer, sz);
+    if (result != 0) goto error_cleanup1;
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    result = _asn1_read_int64_from_integer(&(sK->t0), sK_asn1, "t0");
+    if (result != 0) goto error_cleanup2;
+
+    result = _asn1_read_int64_from_integer(&(sK->tStep), sK_asn1, "tStep");
+    if (result != 0) goto error_cleanup2;
+    
+    sK->_intervalMin = CHKPKE_privkey_min_interval(sK->chk_sec);
+    sK->_intervalMax = CHKPKE_privkey_max_interval(sK->chk_sec) + 1;
+    if ((sK->_intervalMin == -1) || (sK->_intervalMax == -1)) goto error_cleanup2;
+
+    asn1_delete_structure(&sK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return 0;
+
+error_cleanup2:
+    CHKPKE_clear(sK->chk_sec);
+    asn1_delete_structure(&sK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
+
+error_cleanup1:
+    memset((void *)buffer, 0, sz);
+    memset((void *)sK, 0, sizeof(*sK));
+    asn1_delete_structure(&sK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
+}
+
 void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
     char *chkder;
     int chkdersz;
@@ -281,6 +435,7 @@ void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
     crypto_scalarmult_base(pK->sign_pub, sK->sign_sec);
     chkder = CHKPKE_pubkey_encode_DER(sK->chk_sec, &chkdersz);
     CHKPKE_init_pubkey_decode_DER(pK->chk_pub, chkder, chkdersz);
+    memset((void *)chkder, 0, chkdersz);
     free(chkder);
     pK->t0 = sK->t0;
     pK->tStep = sK->tStep;

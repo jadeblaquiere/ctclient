@@ -91,10 +91,10 @@ cd pbc
 autoreconf --install
 case "$OSTYPE" in
   linux*)
-    ./configure --prefix=/usr
+    ./configure --prefix=/usr --enable-safe-clean
     ;;
   darwin*)
-    ./configure
+    ./configure --enable-safe-clean
     ;;
 esac
 make

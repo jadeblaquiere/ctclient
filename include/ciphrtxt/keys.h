@@ -83,7 +83,7 @@ unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, int64_t tStart, size_t 
 // risk exposure is limited both forward and backwards in time.
 unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart, int64_t tEnd, size_t *sz);
 
-int ctSecretKey_init_Import_DER(ctSecretKey sK, unsigned char *der, size_t sz);
+int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz);
 
 void ctPublicKey_init_ctSecretKey(ctPublicKey pbK, ctSecretKey sK);
 void ctPublicKey_clear(ctPublicKey pbK);
