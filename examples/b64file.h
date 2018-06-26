@@ -47,7 +47,7 @@ int write_b64wrapped_to_file(FILE *fPtr, unsigned char* bindata, size_t sz, char
 // extract b64 data wrapped with "-----BEGIN <wrap>-----" and
 // "-----END <wrap>-----" from file, decode and return buffer and size;
 // returns NULL on error
-char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, size_t *sz);
+unsigned char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, size_t *sz);
 
 #ifdef __cplusplus
 }

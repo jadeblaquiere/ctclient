@@ -445,3 +445,142 @@ void ctPublicKey_clear(ctPublicKey pK) {
     CHKPKE_clear(pK->chk_pub);
     memset((void *)pK, 0, sizeof(*pK));
 }
+
+unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE pK_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    int result;
+    int length;
+    int sum;
+
+    sum = 0;
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return NULL;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTPublicKey",
+        &pK_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "addr_pub", pK->addr_pub, sizeof(pK->addr_pub));
+    sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "enc_pub", pK->enc_pub, sizeof(pK->enc_pub));
+    sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "sign_pub", pK->sign_pub, sizeof(pK->sign_pub));
+    buffer = (unsigned char *)CHKPKE_pubkey_encode_DER(pK->chk_pub, &length);
+    if (buffer == NULL) {
+        asn1_delete_structure(&pK_asn1);
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+    sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "chk_pub", buffer, length);
+    sum += _asn1_write_int64_as_integer(pK_asn1, "t0", pK->t0);
+    sum += _asn1_write_int64_as_integer(pK_asn1, "tStep", pK->tStep);
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    sum += 256;  // pad for DER header + some extra just in case
+    length = sum;
+    buffer = (unsigned char *)malloc((sum) * sizeof(char));
+    assert(buffer != NULL);
+    result = asn1_der_coding(pK_asn1, "", (char *)buffer, &length, asnError);
+    if (result != 0) {
+        asn1_delete_structure(&pK_asn1);
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+    assert(length < sum);
+
+    asn1_delete_structure(&pK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    *sz = length;
+    return buffer;
+}
+
+int ctPublicKey_init_decode_DER(ctPublicKey pK, unsigned char *der, size_t dsz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE pK_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    size_t  sz;
+    int result;
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return -1;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTPublicKey",
+        &pK_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return -1;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // read DER into ASN1 structure
+    result = asn1_der_decoding(&pK_asn1, der, dsz, asnError);
+    if (result != ASN1_SUCCESS) return -1;
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // Read secret key from ASN1 structure
+    buffer = _asn1_read_octet_string(pK_asn1, "addr_pub", &sz);
+    if (sz != sizeof(pK->addr_pub)) goto error_cleanup1;
+    memcpy((void *)pK->addr_pub, (void *)buffer, sz);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    buffer = _asn1_read_octet_string(pK_asn1, "enc_pub", &sz);
+    if (sz != sizeof(pK->enc_pub)) goto error_cleanup1;
+    memcpy((void *)pK->enc_pub, (void *)buffer, sz);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    buffer = _asn1_read_octet_string(pK_asn1, "sign_pub", &sz);
+    if (sz != sizeof(pK->sign_pub)) goto error_cleanup1;
+    memcpy((void *)pK->sign_pub, (void *)buffer, sz);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    buffer = _asn1_read_octet_string(pK_asn1, "chk_pub", &sz);
+    result = CHKPKE_init_pubkey_decode_DER(pK->chk_pub, (char *)buffer, sz);
+    if (result != 0) goto error_cleanup1;
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    result = _asn1_read_int64_from_integer(&(pK->t0), pK_asn1, "t0");
+    if (result != 0) goto error_cleanup2;
+
+    result = _asn1_read_int64_from_integer(&(pK->tStep), pK_asn1, "tStep");
+    if (result != 0) goto error_cleanup2;
+    
+    asn1_delete_structure(&pK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return 0;
+
+error_cleanup2:
+    CHKPKE_clear(pK->chk_pub);
+    asn1_delete_structure(&pK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
+
+error_cleanup1:
+    memset((void *)buffer, 0, sz);
+    memset((void *)pK, 0, sizeof(*pK));
+    asn1_delete_structure(&pK_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
+}

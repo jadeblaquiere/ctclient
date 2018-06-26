@@ -83,10 +83,20 @@ unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, int64_t tStart, size_t 
 // risk exposure is limited both forward and backwards in time.
 unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart, int64_t tEnd, size_t *sz);
 
+// import (decode) a DER key as a secret key
 int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz);
 
-void ctPublicKey_init_ctSecretKey(ctPublicKey pbK, ctSecretKey sK);
-void ctPublicKey_clear(ctPublicKey pbK);
+// initialize a public key from a secret key
+void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK);
+void ctPublicKey_clear(ctPublicKey pK);
+
+// export a binary (ASN.1 DER Encoded) representation of the public key
+// public keys are valid for all time periods (though clearly encoding 
+// messages for times in the past is of questionable value)
+unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz);
+
+// import (decode) a DER key as a public key
+int ctPublicKey_init_decode_DER(ctPublicKey pK, unsigned char *der, size_t dsz);
 
 // internal libary routines for handling time/interval conversion
 int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, int64_t t);

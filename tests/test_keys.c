@@ -122,8 +122,8 @@ START_TEST(test_key_export_import)
     assert(der1 != NULL);
     assert(sz1 > 0);
     //{
-    //    int i
-    //    printf("export DER (%zd bytes) = \n", sz1);
+    //    int i;
+    //    printf("export DER (SECRET) (%zd bytes) = \n", sz1);
     //    for (i = 0; i < sz1; i++) {
     //        printf("%02X", der1[i]);
     //    }
@@ -151,6 +151,41 @@ START_TEST(test_key_export_import)
     assert(sz2 == sz1);
     assert(memcmp(der1, der2, sz1) == 0);
 
+    ctSecretKey_clear(sK2);
+    ctSecretKey_clear(sK1);
+END_TEST
+
+START_TEST(test_key_export_pubkey_import)
+    ctSecretKey sK1;
+    ctPublicKey pK1, pK2;
+    unsigned char *der1, *der2;
+    size_t sz1, sz2;
+    int result;
+
+    ctSecretKey_init_GEN(sK1, 0, 0, 0, 0, 0);
+    ctPublicKey_init_ctSecretKey(pK1, sK1);
+    
+    der1 = ctPublicKey_Export_DER(pK1, &sz1);
+    assert(der1 != NULL);
+    //{
+    //    int i;
+    //    printf("export DER (PUBLIC) (%zd bytes) = \n", sz1);
+    //    for (i = 0; i < sz1; i++) {
+    //        printf("%02X", der1[i]);
+    //    }
+    //    printf("\n");
+    //}
+
+    result = ctPublicKey_init_decode_DER(pK2, der1, sz1);
+    assert(result == 0);
+
+    der2 = ctPublicKey_Export_DER(pK2, &sz2);
+    assert(der2 != NULL);
+    assert(sz1 == sz2);
+    assert(memcmp(der1, der2, sz1) == 0);
+
+    ctPublicKey_clear(pK2);
+    ctPublicKey_clear(pK1);
     ctSecretKey_clear(sK1);
 END_TEST
 
@@ -165,6 +200,7 @@ static Suite *mpCT_test_suite(void) {
     tcase_add_test(tc, test_key_intervals);
     tcase_add_test(tc, test_sizes);
     tcase_add_test(tc, test_key_export_import);
+    tcase_add_test(tc, test_key_export_pubkey_import);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

@@ -67,7 +67,7 @@ extern "C" {
 //
 // AEAD_Ciphertext = AEAD_ENC ( (Inner Header || Message_Plaintext) || pad )
 // 
-// Inner Header
+// Inner Header (sent encrypted)
 //     00  20 (32 bytes) i Value (EC Discrete Log of I)
 //     20  40 (32 bytes) EdDSA Pubkey (ECDH point)
 //     40  48 ( 8 bytes) Message length in bytes (Lm)

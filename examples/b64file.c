@@ -77,10 +77,11 @@ static void _free_readbuf(_readbuf_t *next) {
     return;
 }
 
-char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, int *sz) {
+unsigned char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, size_t *sz) {
     char *filedata;
-    char *bindata;
+    unsigned char *bindata;
     char *b64data;
+    char *b64end;
     char *begin_tag;
     char *end_tag;
     size_t read;
@@ -139,18 +140,18 @@ char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, int *sz) {
 
     b64data = strtok(NULL, "-----");
     if (b64data == NULL) goto error_cleanup2;
-    bindata = strtok(NULL, "-----");
-    if (bindata == NULL) goto error_cleanup2;
+    b64end = strtok(NULL, "-----");
+    if (b64end == NULL) goto error_cleanup2;
 
     // expect end tag, error if not found;
-    if (strcmp(bindata, end_tag) != 0) goto error_cleanup1;
+    if (strcmp(b64end, end_tag) != 0) goto error_cleanup1;
 
     // over-allocate buffer, only need ~3/4 len
     len = strlen(b64data);
-    bindata = (char *)malloc(len * sizeof(char));
+    bindata = (unsigned char *)malloc(len * sizeof(char));
 
     base64_init_decodestate(&b64state);
-    result = base64_decode_block(b64data, len, bindata, &b64state);
+    result = base64_decode_block(b64data, len, (char *)bindata, &b64state);
 
     if (result == 0) {
         free(bindata);
@@ -171,5 +172,5 @@ error_cleanup1:
     _free_readbuf(head);
     free(end_tag);
     free(begin_tag);
-    return (char *)NULL;
+    return (unsigned char *)NULL;
 }
