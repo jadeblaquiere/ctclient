@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 
     // HERE IS WHERE THE ACTUAL EXAMPLE STARTS... everything before is
     // processing and very limited validation of command line options
-    ctSecretKey_init_GEN(sK, qbits, rbits, depth, order, ((int64_t)tStep) * 1000000U);
+    ctSecretKey_init_Gen(sK, qbits, rbits, depth, order, ((int64_t)tStep) * 1000000U);
 
      //printf("exporting key\n");
     der = ctSecretKey_Export_FS_DER(sK, sK->t0, &sz);

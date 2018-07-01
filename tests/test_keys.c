@@ -75,7 +75,7 @@ START_TEST(test_init_key)
     ctSecretKey sK;
     ctPublicKey pK;
 
-    ctSecretKey_init_GEN(sK, 0, 0, 0, 0, 0);
+    ctSecretKey_init_Gen(sK, 0, 0, 0, 0, 0);
     ctPublicKey_init_ctSecretKey(pK, sK);
 
     ctPublicKey_clear(pK);
@@ -87,7 +87,7 @@ START_TEST(test_key_intervals)
     int64_t maxInterval;
     int64_t maxTime;
 
-    ctSecretKey_init_GEN(sK, 0, 0, 0, 0, 0);
+    ctSecretKey_init_Gen(sK, 0, 0, 0, 0, 0);
 
     assert (_ctSecretKey_interval_for_time(sK, sK->t0 - 1) == -1);
     assert (_ctSecretKey_interval_for_time(sK, sK->t0) == 0);
@@ -113,10 +113,10 @@ START_TEST(test_key_export_import)
     ctSecretKey sK1, sK2;
     unsigned char *der1, *der2, *chkder1, *chkder2;
     size_t sz1, sz2;
-    int chksz1, chksz2;
+    size_t chksz1, chksz2;
     int result;
 
-    ctSecretKey_init_GEN(sK1, 0, 0, 0, 0, 0);
+    ctSecretKey_init_Gen(sK1, 0, 0, 0, 0, 0);
 
     der1 = ctSecretKey_Export_FS_DER(sK1, sK1->t0, &sz1);
     assert(der1 != NULL);
@@ -140,8 +140,8 @@ START_TEST(test_key_export_import)
     assert(sK1->_intervalMin == sK2->_intervalMin);
     assert(sK1->_intervalMax == sK2->_intervalMax);
     
-    chkder1 = (unsigned char *)CHKPKE_privkey_encode_delegate_DER(sK1->chk_sec, sK1->_intervalMin, sK1->_intervalMax - 1, &chksz1);
-    chkder2 = (unsigned char *)CHKPKE_privkey_encode_delegate_DER(sK2->chk_sec, sK2->_intervalMin, sK2->_intervalMax - 1, &chksz2);
+    chkder1 = CHKPKE_privkey_encode_delegate_DER(sK1->chk_sec, sK1->_intervalMin, sK1->_intervalMax - 1, &chksz1);
+    chkder2 = CHKPKE_privkey_encode_delegate_DER(sK2->chk_sec, sK2->_intervalMin, sK2->_intervalMax - 1, &chksz2);
     assert(chksz1 == chksz2);
     assert(memcmp(chkder1, chkder2, chksz1) == 0);
 
@@ -162,7 +162,7 @@ START_TEST(test_key_export_pubkey_import)
     size_t sz1, sz2;
     int result;
 
-    ctSecretKey_init_GEN(sK1, 0, 0, 0, 0, 0);
+    ctSecretKey_init_Gen(sK1, 0, 0, 0, 0, 0);
     ctPublicKey_init_ctSecretKey(pK1, sK1);
     
     der1 = ctPublicKey_Export_DER(pK1, &sz1);

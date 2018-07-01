@@ -104,7 +104,7 @@ unsigned char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, size_t *sz) {
     next = head;
     next->next = (_readbuf_t *)NULL;
     len = 0;
-    
+
     while(true) {
         read = fread(next->buffer, sizeof(char), 16000, fPtr);
         len += read;
@@ -117,7 +117,7 @@ unsigned char *read_b64wrapped_from_file(FILE *fPtr, char *wrap, size_t *sz) {
         next->next = NULL;
     }
     if (len == 0) goto error_cleanup1;
-    
+
     // concatenate into a single buffer
     filedata = (char *)malloc((len + 1) * sizeof(char));
     next = head;

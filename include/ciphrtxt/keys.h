@@ -69,7 +69,7 @@ typedef struct {
 typedef _ctPublicKey ctPublicKey[1];
 typedef _ctPublicKey *ctPublicKey_ptr;
 
-void ctSecretKey_init_GEN(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep);
+void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep);
 void ctSecretKey_clear(ctSecretKey sK);
 
 // export a binary (ASN.1 DER Encoded) representation of the secret key

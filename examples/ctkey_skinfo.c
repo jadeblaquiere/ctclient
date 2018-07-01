@@ -45,15 +45,15 @@ static void print_utime(int64_t ustime) {
     struct timeval tv;
     struct tm *ltm;
     char buffer[256];
-    char *next;
+    size_t written;
     
     tv.tv_sec = (time_t)(ustime / 1000000);
     tv.tv_usec = (suseconds_t)(ustime % 1000000);
     
     ltm = localtime(&(tv.tv_sec));
-    next = strftime(buffer, sizeof(buffer), "%F %T %Z", ltm);
-    assert(next != NULL);
-    printf(buffer);
+    written = strftime(buffer, sizeof(buffer), "%F %T %Z", ltm);
+    assert(written != 0);
+    printf("%s", buffer);
     return;
 }
 
@@ -67,11 +67,13 @@ int main(int argc, char **argv) {
         {NULL}
     };
     ctSecretKey sK;
+    ctPublicKey pK;
     unsigned char *der;
     size_t sz;
     int result;
     int i;
     unsigned char sK_hash[crypto_generichash_BYTES];
+    unsigned char pK_hash[crypto_generichash_BYTES];
 
     // pc is the context for all popt-related functions
     pc = poptGetContext(NULL, argc, (const char **)argv, po, 0);
@@ -109,11 +111,24 @@ int main(int argc, char **argv) {
     result = ctSecretKey_init_decode_DER(sK, der, sz);
     assert(result == 0);
     
-    crypto_generichash_blake2b(sK_hash, sizeof(sK_hash), der, (unsigned long long)sz, NULL, 0);
+    ctPublicKey_init_ctSecretKey(pK, sK);
+
+    crypto_generichash(sK_hash, sizeof(sK_hash), der, (unsigned long long)sz, NULL, 0);
 
     printf("ciphrtxt secret key, hash(blake2b) = ");
     for (i = 0; i < sizeof(sK_hash); i++) {
         printf("%02X", sK_hash[i]);
+    }
+    printf("\n");
+    
+    free(der);
+    der = ctPublicKey_Export_DER(pK, &sz);
+    
+    crypto_generichash(pK_hash, sizeof(pK_hash), der, (unsigned long long)sz, NULL, 0);
+
+    printf("associated public key, hash(blake2b) = ");
+    for (i = 0; i < sizeof(pK_hash); i++) {
+        printf("%02X", pK_hash[i]);
     }
     printf("\n");
     
@@ -122,11 +137,11 @@ int main(int argc, char **argv) {
     printf("\n");
 
     printf("Not valid before: ");
-    print_utime(sK->t0 + (sK->_intervalMin * sK->tStep));
+    print_utime(_ctSecretKey_time_for_interval(sK, sK->_intervalMin));
     printf("\n");
 
     printf("Not valid after: ");
-    print_utime(sK->t0 + ((sK->_intervalMax + 1) * sK->tStep));
+    print_utime(_ctSecretKey_time_for_interval(sK, sK->_intervalMax + 1));
     printf("\n");
     
     printf("Forward Secure Resolution : %" PRId64 " microseconds\n", sK->tStep);

@@ -45,15 +45,15 @@ static void print_utime(int64_t ustime) {
     struct timeval tv;
     struct tm *ltm;
     char buffer[256];
-    char *next;
+    size_t written;
     
     tv.tv_sec = (time_t)(ustime / 1000000);
     tv.tv_usec = (suseconds_t)(ustime % 1000000);
     
     ltm = localtime(&(tv.tv_sec));
-    next = strftime(buffer, sizeof(buffer), "%F %T %Z", ltm);
-    assert(next != NULL);
-    printf(buffer);
+    written = strftime(buffer, sizeof(buffer), "%F %T %Z", ltm);
+    assert(written != 0);
+    printf("%s", buffer);
     return;
 }
 
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
     result = ctPublicKey_init_decode_DER(pK, der, sz);
     assert(result == 0);
 
-    crypto_generichash_blake2b(pK_hash, sizeof(pK_hash), der, (unsigned long long)sz, NULL, 0);
+    crypto_generichash(pK_hash, sizeof(pK_hash), der, (unsigned long long)sz, NULL, 0);
 
     printf("ciphrtxt public key, hash(blake2b) = ");
     for (i = 0; i < sizeof(pK_hash); i++) {

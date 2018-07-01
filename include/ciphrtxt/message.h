@@ -31,29 +31,36 @@
 #ifndef _CIPHRTXT_MESSAGE_H_INCLUDED_
 #define _CIPHRTXT_MESSAGE_H_INCLUDED_
 
-#include <sodium.h>
-#include <fspke.h>
 #include <ciphrtxt/keys.h>
+#include <fspke.h>
+#include <sodium.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define _CT_MAX_MIME_LEN    (256)
+#define _CT_BLKSZ           (240)
+#define _CT_AUTH_HDR_SZ     (0x80)
+#define _CT_HDR_SIGD_SZ     (0xA0)
+#define _CT_MAGIC_BYTES     (3)
+#define _CT_VERSION_BYTES   (5)
+
 /* Implementation of ciphrtxt  */ 
 
 // Message = (Header) || (Payload)
 //
-// NOTE: all contents NETWORK BYTE ORDER (Big Endian)
+// NOTE: all integer contents are transferred in HOST BYTE ORDER (Little Endian)
 //
 // Header (240 bytes -> 320 Base64 Characters):
 //  AS 00  03 ( 3 bytes) Message Type Magic Number (0x09 0x33 0x17) => "CTMX" in Base64
 //  AS 03  08 ( 5 bytes) Message Format Version (initial version = 0x0001000000)
 //  AS 08  10 ( 8 bytes) Time (microseconds since 1/1/70)
 //  AS 10  18 ( 8 bytes) Expiration (microseconds since 1/1/70)
-//  AS 18  38 (32 bytes) Address "I" Value (point)
-//  AS 38  58 (32 bytes) Address "J" Value (point)
-//  AS 58  78 (32 bytes) ECDHE exchange (point)
-//  AS 78  80 ( 8 bytes) Payload Block Count (256 byte blocks)
+//  AS 18  20 ( 8 bytes) Payload Block Count (240 byte blocks binary/320 in b64)
+//  AS 20  40 (32 bytes) Address "I" Value (point)
+//  AS 40  60 (32 bytes) Address "J" Value (point)
+//  AS 60  80 (32 bytes) ECDHE exchange (point)
 //   S 80  A0 (32 bytes) Payload Hash
 //     A0  E0 (64 bytes) EdDSA Signature
 //     E0  E8 ( 8 bytes) reserved, zero
@@ -62,53 +69,89 @@ extern "C" {
 // Fields with A prefix are authenticated in AEAD
 // Fields with S prefix are signed by EdDSA Signature
 
-// Payload = Len(FSKey) (2 bytes) || FSKey (?? Bytes) || Encryption Nonce || AEAD_Ciphertext
-// (Len(FSKey) and FS Key are also authenticated in AEAD)
+// Preamble = Len(FSKey) (4 bytes) || FSKey (?? Bytes) || Encryption Nonce 
+// the preamble is authenticated in AEAD
+//
+// AEAD_Data = Header[0x00:0x80] || Preamble
+//
+// Payload = Preamble || AEAD_Ciphertext
 //
 // AEAD_Ciphertext = AEAD_ENC ( (Inner Header || Message_Plaintext) || pad )
-// 
+//
 // Inner Header (sent encrypted)
-//     00  20 (32 bytes) i Value (EC Discrete Log of I)
-//     20  40 (32 bytes) EdDSA Pubkey (ECDH point)
-//     40  48 ( 8 bytes) Message length in bytes (Lm)
-//     48  4C ( 4 bytes) MIME type Length (m, maximum = 180)
-//     4C  ?? ( m bytes) MIME type
-//     ?? 100 ( 180-m bytes) pad (zeroes)
-//    100  ?? ( L bytes) Message
-//     ??  ?? ( P bytes) pad (to result in complete block after enc)
+//      0  20 (32 bytes) EdDSA Pubkey (ECDH point)
+//     20  28 ( 8 bytes) Message length in bytes (Lm)
+//     28  2C ( 4 bytes) MIME type Length (m, maximum = 180)
+//     2C  ?? ( m bytes) MIME type
 //
 // NOTE: ciphrtxt uses libsodium's XChaCha20-Poly1305 authenticated encryption
 // which implies a 192-bit (24 byte) nonce + auth tag of 128-bits (16 bytes)
-// so the required pad length is -(((Lm + 2 + Lk) + 24 + 16) % 256) % 256
+// so the required pad length is -(((Lm + 4 + Lk) + 24 + 16) % 240) % 240
 //
 
 typedef struct {
-    char            magic[3];
-    unsigned char   version[5];
-    uint64_t        msgtime_msec;
-    uint64_t        expire_sec;
+    char            magic[_CT_MAGIC_BYTES];
+    unsigned char   version[_CT_VERSION_BYTES];
+    uint64_t        msgtime_usec;
+    uint64_t        expire_usec;
+    uint64_t        payload_blocks;
     _ed25519pk      I_point;
     _ed25519pk      J_point;
     _ed25519pk      ECDHE_point;
-    uint64_t        payload_blocks;
     unsigned char   payload_hash[crypto_generichash_BYTES];
     unsigned char   header_signature[crypto_sign_BYTES];
     unsigned char   reserved[8];
     uint64_t        nonce;
-} _CtMessageHeader;
+} _ctMessageHeader;
 
-typedef _CtMessageHeader CtMessageHeader[1];
-typedef _CtMessageHeader *CtMessageHeader_ptr;
+typedef _ctMessageHeader ctMessageHeader[1];
+typedef _ctMessageHeader *ctMessageHeader_ptr;
 
 typedef struct {
-    _ed25519sk      i_scalar;
     _ed25519pk      SIG_point;
     uint64_t        msglen;
     uint32_t        mimelen;
-    char            mime[180];
-} _CtMessageInnerHeader;
+    char            mime[_CT_MAX_MIME_LEN];
+} _ctMessageInnerHeader;
 
-typedef _CtMessageInnerHeader *CtMessageInnerHeader_ptr;
+typedef _ctMessageInnerHeader ctMessageInnerHeader[1];
+typedef _ctMessageInnerHeader *ctMessageInnerHeader_ptr;
+
+typedef struct {
+    _ed25519sk      addr_sec;
+    _ed25519sk      ephem_sec;
+    _ed25519sk      sig_sec;
+    unsigned char   sym_key[crypto_stream_xchacha20_KEYBYTES];
+} _ctMessageSecrets;
+
+typedef _ctMessageSecrets ctMessageSecrets[1];
+typedef _ctMessageSecrets *ctMessageSecrets_ptr;
+
+typedef struct {
+    ctMessageHeader         hdr;
+    unsigned char           *fsk;
+    uint32_t                fsksz;
+    unsigned char           nonce[crypto_aead_xchacha20poly1305_ietf_NPUBBYTES];
+    ctMessageInnerHeader    inner;
+    size_t                  innersz;
+    unsigned char           *ctext;
+    size_t                  ctextsz;
+    ctMessageSecrets        secrets;
+} _ctMessage;
+
+typedef _ctMessage  ctMessage[1];
+typedef _ctMessage  *ctMessage_ptr;
+
+// encrypt a plaintext message for a single recipient toK. toK, plaintext and p_sz
+// are required inputs. If fromK is NULL, a random origination address will be
+// used (resulting in an anonymous message). If timestamp is 0, the current 
+// system time will be used (converted to UTC as all times are UTC in ciphrtxt)
+// the resulting message is signed and stored in msg. if ttl is zero the default
+// ttl (1 week) will be used. If mime is NULL then the default (text/plain) will
+// be used.
+int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
+  int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
+  size_t p_sz);
 
 #ifdef __cplusplus
 }

@@ -90,14 +90,24 @@ int64_t _ctPublicKey_time_for_interval(ctPublicKey pK, int64_t i) {
     return pK->t0 + (i * pK->tStep);
 }
 
-void ctSecretKey_init_GEN(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep) {
+void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep) {
     struct timeval tv;
     int qb, rb, d, o;
+    _ed25519pk test_mul;
 
     assert(sizeof(sK->addr_sec) == crypto_scalarmult_ed25519_SCALARBYTES);
-    randombytes_buf(sK->addr_sec, sizeof(sK->addr_sec));
-    randombytes_buf(sK->enc_sec, sizeof(sK->enc_sec));
-    randombytes_buf(sK->sign_sec, sizeof(sK->sign_sec));
+
+    do {
+        randombytes_buf(sK->addr_sec, sizeof(sK->addr_sec));
+    } while (crypto_scalarmult_ed25519_base(test_mul, sK->addr_sec) != 0);
+
+    do {
+        randombytes_buf(sK->enc_sec, sizeof(sK->enc_sec));
+    } while (crypto_scalarmult_ed25519_base(test_mul, sK->enc_sec) != 0);
+
+    do {
+        randombytes_buf(sK->sign_sec, sizeof(sK->sign_sec));
+    } while (crypto_scalarmult_ed25519_base(test_mul, sK->sign_sec) != 0);
 
     if (qbits > 0) {
         qb = qbits;
@@ -204,7 +214,7 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
     unsigned char *buffer;
     int result;
-    int length;
+    size_t length;
     int sum;
 
     int64_t iStart, iEnd;
@@ -234,7 +244,7 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "addr_sec", sK->addr_sec, sizeof(sK->addr_sec));
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "enc_sec", sK->enc_sec, sizeof(sK->enc_sec));
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "sign_sec", sK->sign_sec, sizeof(sK->sign_sec));
-    buffer = (unsigned char *)CHKPKE_privkey_encode_delegate_DER(sK->chk_sec, iStart, iEnd, &length);
+    buffer = CHKPKE_privkey_encode_delegate_DER(sK->chk_sec, iStart, iEnd, &length);
     if (buffer == NULL) {
         asn1_delete_structure(&sK_asn1);
         asn1_delete_structure(&ct_asn1);
@@ -252,7 +262,11 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart
     length = sum;
     buffer = (unsigned char *)malloc((sum) * sizeof(char));
     assert(buffer != NULL);
-    result = asn1_der_coding(sK_asn1, "", (char *)buffer, &length, asnError);
+    {
+        int isz = length;
+        result = asn1_der_coding(sK_asn1, "", (char *)buffer, &isz, asnError);
+        length = isz;
+    }
     if (result != 0) {
         asn1_delete_structure(&sK_asn1);
         asn1_delete_structure(&ct_asn1);
@@ -366,7 +380,7 @@ int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz) 
     //printf("-----------------\n");
 
     // read DER into ASN1 structure
-    result = asn1_der_decoding(&sK_asn1, der, dsz, asnError);
+    result = asn1_der_decoding(&sK_asn1, (char *)der, (int)dsz, asnError);
     if (result != ASN1_SUCCESS) return -1;
 
     //printf("-----------------\n");
@@ -393,7 +407,7 @@ int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz) 
     free(buffer);
 
     buffer = _asn1_read_octet_string(sK_asn1, "chk_sec", &sz);
-    result = CHKPKE_init_privkey_decode_DER(sK->chk_sec, (char *)buffer, sz);
+    result = CHKPKE_init_privkey_decode_DER(sK->chk_sec, buffer, sz);
     if (result != 0) goto error_cleanup1;
     memset((void *)buffer, 0, sz);
     free(buffer);
@@ -427,8 +441,8 @@ error_cleanup1:
 }
 
 void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
-    char *chkder;
-    int chkdersz;
+    unsigned char *chkder;
+    size_t chkdersz;
 
     crypto_scalarmult_base(pK->addr_pub, sK->addr_sec);
     crypto_scalarmult_base(pK->enc_pub, sK->enc_sec);
@@ -452,7 +466,7 @@ unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
     unsigned char *buffer;
     int result;
-    int length;
+    size_t length;
     int sum;
 
     sum = 0;
@@ -474,7 +488,7 @@ unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "addr_pub", pK->addr_pub, sizeof(pK->addr_pub));
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "enc_pub", pK->enc_pub, sizeof(pK->enc_pub));
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "sign_pub", pK->sign_pub, sizeof(pK->sign_pub));
-    buffer = (unsigned char *)CHKPKE_pubkey_encode_DER(pK->chk_pub, &length);
+    buffer = CHKPKE_pubkey_encode_DER(pK->chk_pub, &length);
     if (buffer == NULL) {
         asn1_delete_structure(&pK_asn1);
         asn1_delete_structure(&ct_asn1);
@@ -492,7 +506,11 @@ unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
     length = sum;
     buffer = (unsigned char *)malloc((sum) * sizeof(char));
     assert(buffer != NULL);
-    result = asn1_der_coding(pK_asn1, "", (char *)buffer, &length, asnError);
+    {
+        int isz = length;
+        result = asn1_der_coding(pK_asn1, "", (char *)buffer, &isz, asnError);
+        length = isz;
+    }
     if (result != 0) {
         asn1_delete_structure(&pK_asn1);
         asn1_delete_structure(&ct_asn1);
@@ -556,7 +574,7 @@ int ctPublicKey_init_decode_DER(ctPublicKey pK, unsigned char *der, size_t dsz) 
     free(buffer);
 
     buffer = _asn1_read_octet_string(pK_asn1, "chk_pub", &sz);
-    result = CHKPKE_init_pubkey_decode_DER(pK->chk_pub, (char *)buffer, sz);
+    result = CHKPKE_init_pubkey_decode_DER(pK->chk_pub, buffer, sz);
     if (result != 0) goto error_cleanup1;
     memset((void *)buffer, 0, sz);
     free(buffer);
