@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
         next = head;
         buf = msg;
         while (next != NULL) {
-            memcpy(next->buffer, buf, next->sz);
+            memcpy(buf, next->buffer, next->sz);
             buf += next->sz;
             next = next->next;
         }
