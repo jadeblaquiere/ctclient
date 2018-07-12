@@ -36,6 +36,7 @@
 #include <check.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 // calculate x**e
@@ -74,9 +75,20 @@ END_TEST
 START_TEST(test_init_key)
     ctSecretKey sK;
     ctPublicKey pK;
+    _ed25519sk  sZero;
+    
+    memset(sZero, 0, sizeof(sZero));
 
     ctSecretKey_init_Gen(sK, 0, 0, 0, 0, 0);
     ctPublicKey_init_ctSecretKey(pK, sK);
+
+    assert(memcmp(sZero, sK->addr_sec, sizeof(sZero)) != 0);
+    assert(memcmp(sZero, sK->enc_sec, sizeof(sZero)) != 0);
+    assert(memcmp(sZero, sK->sign_sec, sizeof(sZero)) != 0);
+
+    assert(crypto_core_ed25519_is_valid_point(pK->addr_pub));
+    assert(crypto_core_ed25519_is_valid_point(pK->enc_pub));
+    assert(crypto_core_ed25519_is_valid_point(pK->sign_pub));
 
     ctPublicKey_clear(pK);
     ctSecretKey_clear(sK);

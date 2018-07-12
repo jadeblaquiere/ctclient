@@ -444,9 +444,9 @@ void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
     unsigned char *chkder;
     size_t chkdersz;
 
-    crypto_scalarmult_base(pK->addr_pub, sK->addr_sec);
-    crypto_scalarmult_base(pK->enc_pub, sK->enc_sec);
-    crypto_scalarmult_base(pK->sign_pub, sK->sign_sec);
+    crypto_scalarmult_ed25519_base(pK->addr_pub, sK->addr_sec);
+    crypto_scalarmult_ed25519_base(pK->enc_pub, sK->enc_sec);
+    crypto_scalarmult_ed25519_base(pK->sign_pub, sK->sign_sec);
     chkder = CHKPKE_pubkey_encode_DER(sK->chk_sec, &chkdersz);
     CHKPKE_init_pubkey_decode_DER(pK->chk_pub, chkder, chkdersz);
     memset((void *)chkder, 0, chkdersz);

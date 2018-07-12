@@ -31,10 +31,12 @@
 #include <assert.h>
 #include <ciphrtxt/keys.h>
 #include <ciphrtxt/message.h>
+#include <ciphrtxt/postage.h>
 #include <gmp.h>
 #include <inttypes.h>
 #include <math.h>
 #include <check.h>
+#include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -61,17 +63,85 @@ START_TEST(test_sizes)
     
     // validate header block size (240) and authenticated portion (128)
     assert(sizeof(m->hdr) == (240U));
+    assert(sizeof(m->hdr) == _CT_BLKSZ);
     assert(((void *)m->hdr->payload_hash - (void *)m->hdr) == (128U));
+END_TEST
+
+START_TEST(test_init_clear)
+    ctMessage m;
+    ctSecretKey a_sK;
+    ctSecretKey b_sK;
+    ctPublicKey b_pK;
+    ctPostageRate prate;
+    char *msg = "Hello Bob!";
+    unsigned char *ctext;
+    size_t ctextsz;
+
+    // base value = 10 + (1 / 65536)
+    prate->base_whole = 10;
+    prate->base_fraction = (65536U);
+    // block rate = 1 + 1 / 4
+    prate->l2blocks_whole = 1;
+    prate->l2blocks_fraction = (64 * 16777216U);
+    
+    ctSecretKey_init_Gen(a_sK, 0, 0, 0, 0, 0);
+
+    ctSecretKey_init_Gen(b_sK, 0, 0, 0, 0, 0);
+    ctPublicKey_init_ctSecretKey(b_pK, b_sK);
+
+    ctext = ctMessage_init_Enc(m, b_pK, NULL, 0, 0, NULL, (unsigned char *)msg, strlen(msg), prate, &ctextsz);
+    assert(ctext != NULL);
+    ctMessage_clear(m);
+
+    ctext = ctMessage_init_Enc(m, b_pK, a_sK, 0, 0, NULL, (unsigned char *)msg, strlen(msg), prate, &ctextsz);
+    assert(ctext != NULL);
+    ctMessage_clear(m);
+END_TEST
+
+START_TEST(test_encrypt_decrypt)
+    ctMessage m_e, m_d;
+    ctSecretKey a_sK;
+    ctSecretKey b_sK;
+    ctPublicKey b_pK;
+    ctPostageRate prate;
+    char *msg = "Hello Bob!";
+    unsigned char *ptext;
+    size_t ptextsz;
+    unsigned char *ctext;
+    size_t ctextsz;
+    int status;
+
+    // base value = 10 + (1 / 65536)
+    prate->base_whole = 10;
+    prate->base_fraction = (65536U);
+    // block rate = 1 + 1 / 4
+    prate->l2blocks_whole = 1;
+    prate->l2blocks_fraction = (64 * 16777216U);
+    
+    ctSecretKey_init_Gen(a_sK, 0, 0, 0, 0, 0);
+
+    ctSecretKey_init_Gen(b_sK, 0, 0, 0, 0, 0);
+    ctPublicKey_init_ctSecretKey(b_pK, b_sK);
+
+    ctext = ctMessage_init_Enc(m_e, b_pK, NULL, 0, 0, NULL, (unsigned char *)msg, strlen(msg), prate, &ctextsz);
+    assert(ctext != NULL);
+    status = ctMessage_init_Dec(m_d, b_sK, ctext, ctextsz);
+    assert(status == 0);
+    ptext = ctMessage_plaintext_ptr(m_d, &ptextsz);
+    assert(ptextsz == strlen(msg));
+    assert(0 == strncmp(msg, (char *)ptext, ptextsz));
 END_TEST
 
 static Suite *mpCT_test_suite(void) {
     Suite *s;
     TCase *tc;
 
-    s = suite_create("Ciphrtxt key interface");
+    s = suite_create("Ciphrtxt message interface");
     tc = tcase_create("message");
 
     tcase_add_test(tc, test_sizes);
+    tcase_add_test(tc, test_init_clear);
+    tcase_add_test(tc, test_encrypt_decrypt);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

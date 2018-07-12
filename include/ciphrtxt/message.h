@@ -32,6 +32,7 @@
 #define _CIPHRTXT_MESSAGE_H_INCLUDED_
 
 #include <ciphrtxt/keys.h>
+#include <ciphrtxt/postage.h>
 #include <fspke.h>
 #include <sodium.h>
 
@@ -136,6 +137,8 @@ typedef struct {
     size_t                  innersz;
     unsigned char           *ctext;
     size_t                  ctextsz;
+    unsigned char           *ptext;
+    size_t                  ptextsz;
     ctMessageSecrets        secrets;
 } _ctMessage;
 
@@ -149,9 +152,34 @@ typedef _ctMessage  *ctMessage_ptr;
 // the resulting message is signed and stored in msg. if ttl is zero the default
 // ttl (1 week) will be used. If mime is NULL then the default (text/plain) will
 // be used.
-int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
+unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
   int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
-  size_t p_sz);
+  size_t p_sz, ctPostageRate rate, size_t *sz);
+
+// decrypt an encrypted message (ciphertext) using the key toK. The resulting
+// message structure contains the plaintext along with message metadata. The
+// decrypion process validates the ciphertext and additional data (AEAD). Any
+// error in authentication signature or padding results in msg remaining
+// uninitialized and a nonzero return status.
+int ctMessage_init_Dec(ctMessage msg, ctSecretKey toK, unsigned char *ctext, size_t ctextsz);
+
+// clear message and clear/free all allocated data.
+void ctMessage_clear(ctMessage msg);
+
+// NOTE :: for the following convenience routines, the data returned is
+// embedded in other structured data. You should not write to these locations
+// nor do you need to call free() on the data (to clear and release all memory
+// for the message please call ctMessage_clear())
+
+// return a pointer and length for the message plaintext.
+unsigned char *ctMessage_plaintext_ptr(ctMessage msg, size_t *ptsz);
+
+// return a pointer and length for the message plaintext. The mime type is 
+// null terminated and expected to contain ascii text
+char *ctMessage_mime_ptr(ctMessage msg, size_t *mimesz);
+
+// return a pointer and length for the message plaintext. 
+unsigned char *ctMessage_ciphertext_ptr(ctMessage msg, size_t *ctsz);
 
 #ifdef __cplusplus
 }

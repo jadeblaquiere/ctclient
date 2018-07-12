@@ -1,1 +1,1 @@
-nobase_include_HEADERS = ciphrtxt.h ciphrtxt/keys.h ciphrtxt/message.h
+nobase_include_HEADERS = ciphrtxt.h ciphrtxt/keys.h ciphrtxt/message.h ciphrtxt/postage.h

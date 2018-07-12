@@ -12,6 +12,7 @@ AC_ARG_ENABLE([examples],
   *) AC_MSG_ERROR([bad value ${enableval} for --enable-examples]) ;;
 esac],[debug=false])
 AM_CONDITIONAL([COND_EXAMPLES], [test "x$examples" = xtrue])
+AC_CHECK_LIB([m], [log2])
 AC_CHECK_LIB([gmp], [__gmpz_realloc])
 AC_CHECK_LIB([ecc], [mpFp_init])
 AC_CHECK_LIB([pbc], [element_printf])

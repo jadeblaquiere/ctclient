@@ -28,8 +28,10 @@
 //OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <assert.h>
 #include <ciphrtxt/keys.h>
 #include <ciphrtxt/message.h>
+#include <ciphrtxt/postage.h>
 #include <fspke.h>
 #include <inttypes.h>
 #include <libtasn1.h>
@@ -37,6 +39,7 @@
 #include <pbc.h>
 #include <portable_endian.h>
 #include <sodium.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/time.h>
@@ -48,7 +51,8 @@
 static char *_ct_msg_magic = "\x09\x33\x17";
 static size_t _ct_msg_magic_sz = _CT_MAGIC_BYTES;
 
-static unsigned char *_ct_msg_version = (unsigned char *)"\x00\x01\x00\x00\x00";
+// little endian representation of 0x0001 0000 00 (for 1.0.0)
+static unsigned char *_ct_msg_version = (unsigned char *)"\x00\x00\x01\x00\x00";
 static size_t _ct_msg_version_sz = _CT_VERSION_BYTES;
 
 static char *_ct_msg_default_mime = "text/plain";
@@ -83,7 +87,7 @@ static unsigned char *_ctMessage_compose_auth_data(ctMessage msg, size_t *asz) {
     
     preamble = _ctMessage_compose_preamble(msg, &preamblesz);
     
-    memcpy(hdr, msg->hdr, sizeof(hdr));
+    memcpy(hdr, msg->hdr, _CT_AUTH_HDR_SZ);
     hdr->msgtime_usec = htole64(hdr->msgtime_usec);
     hdr->expire_usec = htole64(hdr->expire_usec);
     hdr->payload_blocks = htole64(hdr->payload_blocks);
@@ -98,9 +102,9 @@ static unsigned char *_ctMessage_compose_auth_data(ctMessage msg, size_t *asz) {
     return adata;
 }
 
-int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
+unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
   int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
-  size_t p_sz) {
+  size_t p_sz, ctPostageRate rate, size_t *sz) {
     element_t       random_e;
     _ed25519pk      ephem_ecdh;
     int             status;
@@ -108,31 +112,35 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
     size_t          payloadsz;
     size_t          ptextsz;
     unsigned char   padsz;
-    
+
     /////////////////////////////////// input checks
 
     // bounds checking time-to-live
     if (ttl != 0) {
         if ((ttl < _CT_MINIMUM_MSG_TTL) || (ttl > _CT_MAXIMUM_MSG_TTL)) {
-            return -1;
+            //printf("TTL bounds check failed\n");
+            return NULL;
         }
     }
 
     if ((timestamp > 0 ) && (timestamp < toK->t0)) {
-        return -1;
+        //printf("timestamp bounds check failed\n");
+        return NULL;
     }
 
     if (mime != NULL) {
         if(strlen(mime) >= _CT_MAX_MIME_LEN) {
-            return -1;
+            //printf("mime_len bounds check failed\n");
+            return NULL;
         }
     }
 
     // fail to accept weak points
-    if ((!crypto_core_ed25519_is_valid_point(toK->addr_pub)) || 
-        (!crypto_core_ed25519_is_valid_point(toK->enc_pub)) ||
-        (!crypto_core_ed25519_is_valid_point(toK->sign_pub))) {
-        return -1;
+    if ((crypto_core_ed25519_is_valid_point(toK->addr_pub) == 0) || 
+        (crypto_core_ed25519_is_valid_point(toK->enc_pub) == 0) ||
+        (crypto_core_ed25519_is_valid_point(toK->sign_pub) == 0)) {
+        //printf("weak point check failed\n");
+        return NULL;
     }
 
     /////////////////////////////////// compose top of header
@@ -178,13 +186,13 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
         memcpy(msg->secrets->sig_sec, fromK->sign_sec, sizeof(msg->secrets->sig_sec));
         status = crypto_scalarmult_ed25519_base(msg->inner->SIG_point, msg->secrets->sig_sec);
         // bad input - zero sig key?
-        if (status == 0) goto error_cleanup1;
+        if (status != 0) goto error_cleanup1;
     } else {
         do {
             randombytes_buf(msg->secrets->sig_sec, sizeof(msg->secrets->sig_sec));
         } while (crypto_scalarmult_ed25519_base(msg->inner->SIG_point, msg->secrets->sig_sec) != 0);
     }
-    
+
     msg->inner->msglen = (int64_t)p_sz;
     {
         char *mime_s;
@@ -193,15 +201,16 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
         } else {
             mime_s = _ct_msg_default_mime;
         }
-        
+
         msg->inner->mimelen = strlen(mime_s);
         memcpy(msg->inner->mime, mime_s, msg->inner->mimelen);
+        msg->inner->mime[msg->inner->mimelen] = 0;
     }
     msg->innersz = sizeof(msg->inner->SIG_point) + sizeof(msg->inner->msglen) +
         sizeof(msg->inner->mimelen) + ((size_t)msg->inner->mimelen);
 
     /////////////////////////////////// payload authenticated data
-    
+
     // select a random E(Fp2) element for CHK forward-secure key exchange
     CHKPKE_init_random_element(random_e, toK->chk_pub);
     {
@@ -215,13 +224,17 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
         buffer = (unsigned char *)malloc(bsz);
         memcpy(buffer, ephem_ecdh, sizeof(ephem_ecdh));
         memcpy(buffer + sizeof(ephem_ecdh), fs_bytes, fssz);
-        
+        memset(fs_bytes, 0, fssz);
+        free(fs_bytes);
+
         // hash composite key
         crypto_generichash(msg->secrets->sym_key, sizeof(msg->secrets->sym_key), buffer, bsz, NULL, 0);
         memset(buffer, 0, bsz);
         free(buffer);
         memset(ephem_ecdh, 0, sizeof(ephem_ecdh));
     }
+
+    /////////////////////////////////// generate sym. encryption nonce, keys
 
     // Encrypt forward-secure key for recipient
     {
@@ -237,25 +250,29 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
 
     // message nonce
     randombytes_buf(msg->nonce, sizeof(msg->nonce));
-    
+
     // calculate payload length () 
     // preamble is unencrypted, authenticated payload
     preamblesz = sizeof(msg->fsksz) + ((size_t)msg->fsksz) + sizeof(msg->nonce);
     // encrypted payload includes inner header and message plaintext
     ptextsz = msg->innersz + ((size_t)msg->inner->msglen);
-    // total payload is preable + encrypted payload + authentication tag
+    // total payload is preable + encrypted payload + authentication tag + pad
+    // (pad size added below)
     payloadsz = preamblesz + ptextsz + ((size_t)crypto_aead_xchacha20poly1305_ietf_ABYTES);
-    
+
     // calculate pad size
     {
         size_t padsize_s;
         padsize_s = (_CT_BLKSZ - (payloadsz % _CT_BLKSZ)) % _CT_BLKSZ;
         padsz = (unsigned char)padsize_s;
     }
-    
-    msg->hdr->payload_blocks = ((payloadsz + padsz) / _CT_BLKSZ);
-    assert((msg->hdr->payload_blocks * _CT_BLKSZ) == (payloadsz + padsz));
+    payloadsz += padsz;
+
+    msg->hdr->payload_blocks = (payloadsz / _CT_BLKSZ);
+    assert((msg->hdr->payload_blocks * _CT_BLKSZ) == (payloadsz));
     ptextsz += padsz;
+
+    /////////////////////////////////// encrypt
 
     // symmetric encryption
     {
@@ -265,8 +282,8 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
         unsigned char *pad;
         unsigned long long clen;
         size_t adatasz;
+        size_t ciphersz;
         int i;
-        crypto_generichash_state state;
 
         memcpy(inner, msg->inner, msg->innersz);
 
@@ -282,42 +299,312 @@ int ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK,
         for (i = 0; i < padsz; i++) {
             pad[i] = padsz;
         }
+        msg->ptext = ptext;
+        msg->ptextsz = ptextsz;
 
         adata = _ctMessage_compose_auth_data(msg, &adatasz);
-        
-        msg->ctextsz = ptextsz + crypto_aead_xchacha20poly1305_ietf_ABYTES;
+        ciphersz = ptextsz + crypto_aead_xchacha20poly1305_ietf_ABYTES;
+
+        msg->ctextsz = _CT_BLKSZ + preamblesz + ciphersz ;
         msg->ctext = (unsigned char *)malloc(msg->ctextsz);
-        
-        status = crypto_aead_xchacha20poly1305_ietf_encrypt(msg->ctext, &clen, 
+
+        status = crypto_aead_xchacha20poly1305_ietf_encrypt(msg->ctext + _CT_BLKSZ + preamblesz, &clen, 
             ptext, (unsigned long long)(ptextsz),
             adata, (unsigned long long)adatasz, NULL, msg->nonce, msg->secrets->sym_key);
+        assert(clen == (ciphersz));
         msg->ctextsz = (size_t)clen;
-        memset(ptext, 0, ptextsz);
-        free(ptext);
+
+        // Copy preamble into encoded ciphertext message
+        memcpy(msg->ctext + _CT_BLKSZ, adata + _CT_AUTH_HDR_SZ, preamblesz);
+
+        // Clear and free temporary data
         memset((void *)inner, 0, msg->innersz);
+        memset(adata, 0, adatasz);
+        free(adata);
         if (status != 0)
         {
-            memset(adata, 0, adatasz);
-            free(adata);
             goto error_cleanup2;
         }
 
-        crypto_generichash_init(&state, NULL, 0, sizeof(msg->hdr->payload_hash));
-        crypto_generichash_update(&state, adata+_CT_AUTH_HDR_SZ, adatasz - _CT_AUTH_HDR_SZ);
-        crypto_generichash_update(&state, msg->ctext, msg->ctextsz);
-        crypto_generichash_final(&state, msg->hdr->payload_hash, sizeof(msg->hdr->payload_hash));
-        
-        memset(adata, 0, adatasz);
-        free(adata);
+        // Calculate hash of payload (authenticated preamble + ciphertext)
+        crypto_generichash(msg->hdr->payload_hash, sizeof(msg->hdr->payload_hash), msg->ctext + _CT_BLKSZ, preamblesz + msg->ctextsz, NULL, 0);
     }
 
-    return 0;
+    // reserved data
+    memset(msg->hdr->reserved, 0, sizeof(msg->hdr->reserved));
+
+    /////////////////////////////////// sign
+
+    // sign with a shared secret key (intentionally forgeable by recipient)
+    {
+        unsigned char shared_seed[crypto_sign_SEEDBYTES];
+        unsigned char shared_sign_sec[crypto_sign_SECRETKEYBYTES];
+        unsigned char shared_sign_pub[crypto_sign_PUBLICKEYBYTES];
+        _ed25519pk      sig_ecdh;
+        _ed25519pk      sZero;
+        ctPostageHash ptgt;
+        
+        memset(sZero, 0, sizeof(sZero));
+        assert(memcmp(msg->secrets->sig_sec, sZero, sizeof(sZero)) != 0);
+
+        status = crypto_scalarmult_ed25519(sig_ecdh, msg->secrets->sig_sec, toK->sign_pub);
+        // have already checked sign_pub and sig_sec, so shouldn't encounter error here
+        assert(status == 0);
+        crypto_generichash(shared_seed, sizeof(shared_seed), sig_ecdh, sizeof(sig_ecdh), NULL, 0);
+        crypto_sign_seed_keypair(shared_sign_pub, shared_sign_sec, shared_seed);
+
+        status = ctPostage_hash_target(ptgt, rate, msg->hdr->payload_blocks + 1);
+        do {
+            ctPostageHash hash;
+            // sign ... signature is probablistic, so in theory if no nonce could satisfy the postage target
+            // then simply generating a new signature adds bits to the nonce. Nevertheless the nonce is a 64-bit
+            // value and the postage rate should not in practice be that high
+            crypto_sign_detached(msg->hdr->header_signature, NULL, (unsigned char *)msg->hdr, _CT_HDR_SIGD_SZ, shared_sign_sec);
+
+            // calculate postage hash target (hashcash style)
+            assert(status == 0);
+            // TODO : hash to postage target
+            for (msg->hdr->nonce = 0; msg->hdr->nonce < ULLONG_MAX; msg->hdr->nonce++) {
+                crypto_generichash(hash, sizeof(hash), (void *)msg->hdr, sizeof(msg->hdr), NULL, 0);
+                status = ctPostage_hash_cmp(hash, ptgt);
+                if (status < 0) break;
+            }
+        } while (status >= 0);
+    }
+
+    // copy now-complete single-block header into message
+    memcpy(msg->ctext, (void *)msg->hdr, _CT_BLKSZ);
+
+    // size = 1 block header + payload
+    *sz = _CT_BLKSZ + payloadsz;
+    return msg->ctext;
     
 error_cleanup2:
+    //printf("cleanup2\n");
     CHKPKE_element_clear(random_e);
 error_cleanup1:
+    //printf("cleanup1\n");
     memset(msg->secrets, 0, sizeof(*msg->secrets));
-    //memset(ephem_ecdh, 0, sizeof(ephem_ecdh));
     //memset(msg, 0, sizeof(msg));
+    return NULL;
+}
+
+int ctMessage_init_Dec(ctMessage msg, ctSecretKey toK, unsigned char *ctext, size_t ctextsz) {
+    ctMessageHeader thdr;
+    _ed25519pk addr_point;
+    _ed25519pk ephem_ecdh;
+    unsigned char payload_hash[crypto_generichash_BYTES];
+    unsigned char sym_key[crypto_stream_xchacha20_KEYBYTES];
+    unsigned char shared_seed[crypto_sign_SEEDBYTES];
+    unsigned char shared_sign_sec[crypto_sign_SECRETKEYBYTES];
+    unsigned char shared_sign_pub[crypto_sign_PUBLICKEYBYTES];
+    unsigned char *preamble;
+    unsigned char *fskey_der;
+    unsigned char *nonce;
+    uint32_t fskey_dersz;
+    size_t preamble_sz;
+    element_t fsk_e;
+    int64_t interval;
+    int status;
+    _ed25519pk      sig_ecdh;
+    unsigned char *buffer;
+    unsigned long long blen;
+    unsigned char *ad;
+    unsigned long long adlen;
+    unsigned long long clen;
+    size_t padsz, innersz;
+    unsigned char pad;
+    ctMessageInnerHeader_ptr iptr;
+
+    /////////////////////////////////// validate input
+
+    // check magic and version
+    if (memcmp(ctext, _ct_msg_magic, _ct_msg_magic_sz) != 0) return -1;
+    if (memcmp(ctext + _ct_msg_magic_sz, _ct_msg_version, _ct_msg_version_sz) != 0) return -1;
+
+    // copy header and convert byte order
+    memcpy(thdr, ctext, sizeof(thdr));
+    thdr->msgtime_usec = le64toh(thdr->msgtime_usec);
+    thdr->expire_usec = le64toh(thdr->expire_usec);
+    thdr->payload_blocks = le64toh(thdr->payload_blocks);
+
+    // validate no degenerate points input
+    if ((crypto_core_ed25519_is_valid_point(thdr->I_point) == 0) || 
+        (crypto_core_ed25519_is_valid_point(thdr->J_point) == 0) ||
+        (crypto_core_ed25519_is_valid_point(thdr->ECDHE_point) == 0)) {
+        //printf("weak point check failed\n");
+        return -1;
+    }
+
+    // validate addressing matches key
+    status = crypto_scalarmult_ed25519(addr_point, toK->addr_sec, thdr->I_point);
+    if ((status != 0) || (memcmp(addr_point, thdr->J_point, sizeof(addr_point)) != 0)) {
+        return -1;
+    }
+
+    // validate payload hash
+    crypto_generichash(payload_hash, sizeof(payload_hash), ctext + _CT_BLKSZ, ctextsz - _CT_BLKSZ, NULL, 0);
+    if (memcmp(payload_hash, thdr->payload_hash, sizeof(payload_hash)) != 0) return -1;
+
+    /////////////////////////////////// calculate shared key
+
+    preamble = ctext + _CT_BLKSZ;
+    fskey_der = preamble + sizeof(fskey_dersz);
+    fskey_dersz = le32toh(*((uint32_t *)preamble));
+
+    // decrypt forward-secure key
+
+    CHKPKE_init_element(fsk_e, toK->chk_sec);
+    interval = _ctSecretKey_interval_for_time(toK, thdr->msgtime_usec);
+    status = CHKPKE_Dec_DER(fsk_e, toK->chk_sec, fskey_der, fskey_dersz, interval);
+    if (status != 0) return -1;
+
+    // calculate ecdh point
+
+    status = crypto_scalarmult_ed25519(ephem_ecdh, toK->enc_sec, thdr->ECDHE_point);
+    if (status != 0) return -1;
+
+    // hash to secret key
+    {
+        unsigned char *fs_bytes;
+        unsigned char *buffer;
+        size_t fssz, bsz;
+
+        // compose ECDH key with CHK key to generate a shared key for symmetric encryption
+        fs_bytes = CHKPKE_element_to_bytes(fsk_e, &fssz);
+        bsz = sizeof(ephem_ecdh) + (fssz * sizeof(char));
+        buffer = (unsigned char *)malloc(bsz);
+        memcpy(buffer, ephem_ecdh, sizeof(ephem_ecdh));
+        memcpy(buffer + sizeof(ephem_ecdh), fs_bytes, fssz);
+        memset(fs_bytes, 0, fssz);
+        free(fs_bytes);
+
+        // hash composite key
+        crypto_generichash(sym_key, sizeof(sym_key), buffer, bsz, NULL, 0);
+        memset(buffer, 0, bsz);
+        free(buffer);
+        memset(ephem_ecdh, 0, sizeof(ephem_ecdh));
+    }
+
+    /////////////////////////////////// decrypt symmetric
+
+    nonce = preamble + sizeof(fskey_dersz) + fskey_dersz;
+    preamble_sz = sizeof(fskey_dersz) + fskey_dersz + sizeof(msg->nonce);
+
+    // ciphertext = payload - preamble
+    clen = (thdr->payload_blocks * _CT_BLKSZ) - preamble_sz;
+    //  plaintext length = ciphertext - authentication tag
+    blen = clen - crypto_aead_xchacha20poly1305_ietf_ABYTES;
+    buffer = (unsigned char *)malloc(blen * sizeof(unsigned char));
+    assert(buffer != NULL);
+
+    // compose AD
+    adlen = _CT_AUTH_HDR_SZ + preamble_sz;
+    ad = (unsigned char *)malloc(adlen * sizeof(unsigned char));
+    assert(ad != NULL);
+    memcpy(ad, ctext, _CT_AUTH_HDR_SZ);
+    memcpy(ad + _CT_AUTH_HDR_SZ, preamble, preamble_sz);
+
+    status = crypto_aead_xchacha20poly1305_ietf_decrypt(buffer, &blen, NULL,
+        ctext + _CT_BLKSZ + preamble_sz, clen, ad, adlen, nonce, sym_key);
+    if ((status != 0) || (blen != (clen - crypto_aead_xchacha20poly1305_ietf_ABYTES))) {
+        memset(ad, 0, adlen);
+        free(ad);
+        goto error_cleanup1;
+    }
+
+    memset(ad, 0, adlen);
+    free(ad);
+
+    // convert inner header from wire format
+    iptr = (ctMessageInnerHeader_ptr)buffer;
+    iptr->msglen = le64toh(iptr->msglen);
+    iptr->mimelen = le32toh(iptr->mimelen);
+
+    // validate pad
+    innersz = sizeof(iptr->SIG_point) + sizeof(iptr->msglen) +
+        sizeof(iptr->mimelen) + ((size_t)iptr->mimelen);
+
+    if (blen < (innersz + ((size_t)iptr->msglen))) goto error_cleanup1;
+    padsz = blen - (innersz + ((size_t)iptr->msglen));
+    if (padsz >= _CT_BLKSZ) goto error_cleanup1;
+
+    pad = (unsigned char)padsz;
+    
+    // check the pad values
+    {
+        unsigned char *padbytes;
+        int i;
+        
+        padbytes = buffer + blen - padsz;
+        for (i = 0; i < padsz; i++) {
+            if (padbytes[i] != pad) goto error_cleanup1;
+        }
+    }
+
+    // validate signature
+    status = crypto_scalarmult_ed25519(sig_ecdh, toK->sign_sec, iptr->SIG_point);
+    // an error is possible if SIG_point is degenerate
+    if (status != 0) goto error_cleanup1;
+
+    crypto_generichash(shared_seed, sizeof(shared_seed), sig_ecdh, sizeof(sig_ecdh), NULL, 0);
+    crypto_sign_seed_keypair(shared_sign_pub, shared_sign_sec, shared_seed);
+
+    status = crypto_sign_verify_detached(thdr->header_signature, ctext, _CT_HDR_SIGD_SZ, shared_sign_pub);
+    if (status != 0) goto error_cleanup1;
+
+    // once signature is verified, copy message out
+
+    msg->ptext = buffer;
+    msg->ptextsz = blen;
+    memcpy(msg->inner, iptr, innersz);
+    msg->innersz = innersz;
+    // ensure null termination of mime type
+    msg->inner->mime[msg->inner->mimelen] = 0;
+
+    memcpy(msg->hdr, thdr, _CT_BLKSZ);
+    msg->ctext = (unsigned char *)malloc(ctextsz * sizeof(unsigned char));
+    msg->ctextsz = ctextsz;
+    msg->fsk = (unsigned char *)malloc(fskey_dersz * sizeof(unsigned char));
+    memcpy(msg->fsk, fskey_der, fskey_dersz);
+    msg->fsksz = fskey_dersz;
+    memcpy(nonce, msg->nonce, sizeof(msg->nonce));
+    memcpy(msg->secrets->sym_key, sym_key, sizeof(msg->secrets->sym_key));
+
+    return 0;
+
+error_cleanup1:
+    CHKPKE_element_clear(fsk_e);
+    memset(buffer, 0, blen);
+    free(buffer);
     return -1;
+}
+
+void ctMessage_clear(ctMessage msg) {
+    memset(msg->ptext, 0, msg->ptextsz);
+    memset(msg->ctext, 0, msg->ctextsz);
+    memset(msg->fsk, 0, msg->fsksz);
+    free(msg->ctext);
+    free(msg->ptext);
+    free(msg->fsk);
+    memset(msg, 0, sizeof(msg));
+}
+
+// return a pointer and length for the message plaintext.
+unsigned char *ctMessage_plaintext_ptr(ctMessage msg, size_t *ptsz) {
+    *ptsz = msg->inner->msglen;
+    return msg->ptext + msg->innersz;
+}
+
+// return a pointer and length for the message plaintext. The mime type is 
+// null terminated and expected to contain ascii text
+char *ctMessage_mime_ptr(ctMessage msg, size_t *mimesz) {
+    *mimesz = msg->inner->mimelen;
+    return msg->inner->mime;
+}
+
+// return a pointer and length for the message plaintext. 
+unsigned char *ctMessage_ciphertext_ptr(ctMessage msg, size_t *ctsz) {
+    *ctsz = msg->ctextsz;
+    return msg->ctext;
 }
