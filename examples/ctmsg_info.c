@@ -32,40 +32,44 @@
 #include <b64file.h>
 #include <check.h>
 #include <ciphrtxt.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <popt.h>
 #include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
-#include <time.h>
 
-static void print_utime(utime_t utm) {
-    char buffer[256];
-    size_t written;
-
-    written = utime_strftime(buffer, sizeof(buffer), "%a %b %d %T.%Q %Z %Y", utm);
-    assert(written > 0);
-    printf("%s", buffer);
+static void print_bytes(void *b, size_t bsz) {
+    unsigned char *bb;
+    int i;
+    
+    bb = (unsigned char *)b;
+    for (i = 0; i < bsz; i++) {
+        printf("%02X", bb[i]);
+    }
     return;
 }
+
+typedef struct {
+    uint16_t minor;
+    uint16_t major;
+} _version_t;
 
 int main(int argc, char **argv) {
     char *filename = NULL;
     FILE *fPtr = stdin;
     poptContext pc;
     struct poptOption po[] = {
-        {"file", 'f', POPT_ARG_STRING, &filename, 0, "read input from filepath instead of stdin", "file path"},
+        {"file", 'f', POPT_ARG_STRING, &filename, 0, "read input from filepath instead of stdin", "message file path"},
         POPT_AUTOHELP
         {NULL}
     };
-    ctPublicKey pK;
-    unsigned char *der;
-    size_t sz;
-    int result;
-    int i;
-    unsigned char pK_hash[crypto_generichash_BYTES];
+    ctMessageHeader ctMH;
+    unsigned char *ctext;
+    size_t ctsz;
+    char buffer[256];
+    size_t bsz;
+    int status;
 
     // pc is the context for all popt-related functions
     pc = poptGetContext(NULL, argc, (const char **)argv, po, 0);
@@ -83,7 +87,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-
+    
     if (filename != NULL) {
         fPtr = fopen(filename, "r");
         if (fPtr == NULL) {
@@ -94,41 +98,85 @@ int main(int argc, char **argv) {
 
     // HERE IS WHERE THE ACTUAL EXAMPLE STARTS... everything before is
     // processing and very limited validation of command line options
-    der = (unsigned char *)read_b64wrapped_from_file(fPtr, "CIPHRTXT PUBLIC KEY", &sz);
-    if (der == NULL) {
+    ctext = (unsigned char *)read_b64wrapped_from_file(fPtr, "CIPHRTXT ENCRYPTED MESSAGE", &ctsz);
+    if (ctext == NULL) {
         fprintf(stderr,"<ParseError>: unable to decode b64 data\n");
         exit(1);
     }
 
-    result = ctPublicKey_init_decode_DER(pK, der, sz);
-    assert(result == 0);
+    assert(ctsz >= _CT_BLKSZ);
+    memcpy(ctMH, ctext, sizeof(ctMH));
+    ctMH->msgtime_usec = le64toh(ctMH->msgtime_usec);
+    ctMH->expire_usec = le64toh(ctMH->expire_usec);
+    ctMH->payload_blocks = le64toh(ctMH->payload_blocks);
 
-    crypto_generichash(pK_hash, sizeof(pK_hash), der, (unsigned long long)sz, NULL, 0);
+    printf("Message ID (payload hash) = ");
+    print_bytes(ctMH->payload_hash, sizeof(ctMH->payload_hash));
+    printf("\n");
 
-    printf("ciphrtxt public key, hash(blake2b) = ");
-    for (i = 0; i < sizeof(pK_hash); i++) {
-        printf("%02X", pK_hash[i]);
-    }
-    printf("\n");
-    
-    printf("Initial key time: ");
-    print_utime(pK->t0);
-    printf("\n");
-    
     {
-        int64_t maxint;
-        
-        maxint = pK->chk_pub->maxinterval + 1;
-        
-        printf("Not valid after: ");
-        print_utime(pK->t0 + (maxint * pK->tStep));
+        _version_t *vp;
+
+        vp = (_version_t *)(((unsigned char *)ctMH) + 4);
+        printf("Message format version %d.%d\n", vp->major, vp->minor);
+    }
+
+    bsz = utime_strftime(buffer, sizeof(buffer), "%a %b %d %T.%Q %Z %Y", ctMH->msgtime_usec);
+    assert(bsz > 0);
+    printf("sent    : %s\n", buffer);
+
+    bsz = utime_strftime(buffer, sizeof(buffer), "%a %b %d %T.%Q %Z %Y", ctMH->expire_usec);
+    assert(bsz > 0);
+    printf("expires : %s\n", buffer);
+
+    printf("payload : %" PRId64 " blocks ( %" PRId64 " bytes)\n", ctMH->payload_blocks, ctMH->payload_blocks * _CT_BLKSZ);
+
+    printf("I point   = ");
+    print_bytes(ctMH->I_point, sizeof(ctMH->I_point));
+    printf("\n");
+
+    printf("J point   = ");
+    print_bytes(ctMH->J_point, sizeof(ctMH->J_point));
+    printf("\n");
+
+    printf("ECDHE pt  = ");
+    print_bytes(ctMH->ECDHE_point, sizeof(ctMH->ECDHE_point));
+    printf("\n");
+
+    printf("Signature = ");
+    print_bytes(ctMH->header_signature, sizeof(ctMH->header_signature));
+    printf("\n");
+
+    printf("Header nonce = %08" PRIX64 "\nHeader hash  = ", ctMH->nonce);
+
+    {
+        unsigned char hhash[crypto_generichash_BYTES];
+        status = crypto_generichash(hhash, sizeof(hhash), (unsigned char *)ctMH, sizeof(ctMH), NULL, 0);
+        assert(status == 0);
+        print_bytes(hhash, sizeof(hhash));
         printf("\n");
     }
 
-    printf("Forward Secure Resolution : %" PRId64 ".%06" PRId64" seconds\n", (pK->tStep) / (1000000), (pK->tStep) % (1000000));
+    if (ctsz == _CT_BLKSZ) {
+        return 0;
+    }
 
-    free(der);
-    ctPublicKey_clear(pK);
+    {
+        uint32_t *fsksz;
+        unsigned char *fsk;
+        unsigned char *nonce;
+        
+        fsksz = (uint32_t *)(ctext + _CT_BLKSZ);
+        fsk = (unsigned char *)(ctext + _CT_BLKSZ + sizeof(*fsksz));
+        nonce = (unsigned char *)(ctext + _CT_BLKSZ + sizeof(*fsksz) + fsksz[0]);
+        printf("forward-secure (CHK) encrypted key = ");
+        print_bytes(fsk, fsksz[0]);
+        printf("\n");
+
+        printf("symmetric encryption nonce = ");
+        print_bytes(nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+        printf("\n");
+    }
 
     return 0;
 }

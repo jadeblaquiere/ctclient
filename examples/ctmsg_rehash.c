@@ -32,40 +32,29 @@
 #include <b64file.h>
 #include <check.h>
 #include <ciphrtxt.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <popt.h>
 #include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
-#include <time.h>
-
-static void print_utime(utime_t utm) {
-    char buffer[256];
-    size_t written;
-
-    written = utime_strftime(buffer, sizeof(buffer), "%a %b %d %T.%Q %Z %Y", utm);
-    assert(written > 0);
-    printf("%s", buffer);
-    return;
-}
 
 int main(int argc, char **argv) {
     char *filename = NULL;
     FILE *fPtr = stdin;
+    double zeros = 16.0;
     poptContext pc;
     struct poptOption po[] = {
-        {"file", 'f', POPT_ARG_STRING, &filename, 0, "read input from filepath instead of stdin", "file path"},
+        {"file", 'f', POPT_ARG_STRING, &filename, 0, "read input from filepath instead of stdin", "message file path"},
+        {"zeros", 'z', POPT_ARG_DOUBLE, &zeros, 0, "number of most-significant zeros in hash target", "floating point value"},
         POPT_AUTOHELP
         {NULL}
     };
-    ctPublicKey pK;
-    unsigned char *der;
-    size_t sz;
-    int result;
-    int i;
-    unsigned char pK_hash[crypto_generichash_BYTES];
+    ctMessage ctM;
+    ctPostageRate pr;
+    unsigned char *ctext;
+    size_t ctsz;
+    int status;
 
     // pc is the context for all popt-related functions
     pc = poptGetContext(NULL, argc, (const char **)argv, po, 0);
@@ -83,7 +72,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-
+    
     if (filename != NULL) {
         fPtr = fopen(filename, "r");
         if (fPtr == NULL) {
@@ -94,41 +83,34 @@ int main(int argc, char **argv) {
 
     // HERE IS WHERE THE ACTUAL EXAMPLE STARTS... everything before is
     // processing and very limited validation of command line options
-    der = (unsigned char *)read_b64wrapped_from_file(fPtr, "CIPHRTXT PUBLIC KEY", &sz);
-    if (der == NULL) {
+    ctext = (unsigned char *)read_b64wrapped_from_file(fPtr, "CIPHRTXT ENCRYPTED MESSAGE", &ctsz);
+    if (ctext == NULL) {
         fprintf(stderr,"<ParseError>: unable to decode b64 data\n");
         exit(1);
     }
 
-    result = ctPublicKey_init_decode_DER(pK, der, sz);
-    assert(result == 0);
+    // cheat #1, rather than parsing the whole message, just copy header
+    memcpy(ctM->hdr, ctext, _CT_BLKSZ);
 
-    crypto_generichash(pK_hash, sizeof(pK_hash), der, (unsigned long long)sz, NULL, 0);
+    // convert number of (possibly fractional) zeros to ctPostageRate
+    // cheat #2 is to only use the base portion
+    pr->base_whole = (uint32_t)(zeros);
+    pr->base_fraction = (uint32_t)(((double)zeros - (double)(pr->base_whole)) * 
+        4294967296.0);
+    pr->l2blocks_whole = 0;
+    pr->l2blocks_fraction = 0;
+    
+    ctMessage_rehash(ctM, pr);
 
-    printf("ciphrtxt public key, hash(blake2b) = ");
-    for (i = 0; i < sizeof(pK_hash); i++) {
-        printf("%02X", pK_hash[i]);
-    }
-    printf("\n");
+    // copy it back
+    memcpy(ctext, ctM->hdr, _CT_BLKSZ);
     
-    printf("Initial key time: ");
-    print_utime(pK->t0);
-    printf("\n");
-    
-    {
-        int64_t maxint;
-        
-        maxint = pK->chk_pub->maxinterval + 1;
-        
-        printf("Not valid after: ");
-        print_utime(pK->t0 + (maxint * pK->tStep));
-        printf("\n");
+    status = write_b64wrapped_to_file(stdout, ctext, ctsz, "CIPHRTXT ENCRYPTED MESSAGE");
+    if (status != 0) {
+        fprintf(stderr, "<WriteError>: Error writing output\n");
+        exit(1);
     }
 
-    printf("Forward Secure Resolution : %" PRId64 ".%06" PRId64" seconds\n", (pK->tStep) / (1000000), (pK->tStep) % (1000000));
-
-    free(der);
-    ctPublicKey_clear(pK);
-
+    free(ctext);
     return 0;
 }

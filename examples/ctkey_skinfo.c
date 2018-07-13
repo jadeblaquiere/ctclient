@@ -41,18 +41,12 @@
 #include <sys/time.h>
 #include <time.h>
 
-static void print_utime(int64_t ustime) {
-    struct timeval tv;
-    struct tm *ltm;
+static void print_utime(utime_t utm) {
     char buffer[256];
     size_t written;
-    
-    tv.tv_sec = (time_t)(ustime / 1000000);
-    tv.tv_usec = (suseconds_t)(ustime % 1000000);
-    
-    ltm = localtime(&(tv.tv_sec));
-    written = strftime(buffer, sizeof(buffer), "%F %T %Z", ltm);
-    assert(written != 0);
+
+    written = utime_strftime(buffer, sizeof(buffer), "%a %b %d %T.%Q %Z %Y", utm);
+    assert(written > 0);
     printf("%s", buffer);
     return;
 }
@@ -141,10 +135,10 @@ int main(int argc, char **argv) {
     printf("\n");
 
     printf("Not valid after: ");
-    print_utime(_ctSecretKey_time_for_interval(sK, sK->_intervalMax + 1));
+    print_utime(_ctSecretKey_time_for_interval(sK, sK->_intervalMax));
     printf("\n");
     
-    printf("Forward Secure Resolution : %" PRId64 " microseconds\n", sK->tStep);
+    printf("Forward Secure Resolution : %" PRId64 ".%06" PRId64" seconds\n", (sK->tStep) / (1000000), (sK->tStep) % (1000000));
 
     free(der);
     ctSecretKey_clear(sK);

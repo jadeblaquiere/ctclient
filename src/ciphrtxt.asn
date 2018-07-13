@@ -33,6 +33,7 @@ Ciphrtxt DEFINITIONS EXPLICIT TAGS ::=
 BEGIN
 
 CTSecretKey ::= SEQUENCE {
+    version     INTEGER,
     addr_sec    OCTET STRING,
     enc_sec     OCTET STRING,
     sign_sec    OCTET STRING,
@@ -42,6 +43,7 @@ CTSecretKey ::= SEQUENCE {
 }
 
 CTPublicKey ::= SEQUENCE {
+    version     INTEGER,
     addr_pub    OCTET STRING,
     enc_pub     OCTET STRING,
     sign_pub    OCTET STRING,

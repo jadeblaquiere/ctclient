@@ -1,4 +1,4 @@
-noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo ctmsg_enc ctmsg_dec
+noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo ctmsg_enc ctmsg_dec ctmsg_info ctmsg_rehash
 
 ctkey_gen_SOURCES = ctkey_gen.c b64file.c
 ctkey_gen_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
@@ -27,3 +27,11 @@ ctmsg_enc_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
 ctmsg_dec_SOURCES = ctmsg_dec.c b64file.c
 ctmsg_dec_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
 ctmsg_dec_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctmsg_info_SOURCES = ctmsg_info.c b64file.c
+ctmsg_info_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctmsg_info_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctmsg_rehash_SOURCES = ctmsg_rehash.c b64file.c
+ctmsg_rehash_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctmsg_rehash_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)

@@ -29,6 +29,7 @@
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <ciphrtxt/keys.h>
+#include <ciphrtxt/utime.h>
 #include <fspke.h>
 #include <inttypes.h>
 #include <libtasn1.h>
@@ -66,32 +67,31 @@ static int64_t _pow_i64(int64_t x, int64_t e) {
 
 // negative intervals are always invalid... doesn't matter how negative
 
-int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, int64_t t) {
+int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, utime_t t) {
     if (t >= sK->t0) {
-        return (t - sK->t0) / sK->tStep;
+        return (int64_t)((t - sK->t0) / sK->tStep);
     } else {
         return -1;
     }
 }
 
-int64_t _ctSecretKey_time_for_interval(ctSecretKey sK, int64_t i) {
-    return sK->t0 + (i * sK->tStep);
+utime_t _ctSecretKey_time_for_interval(ctSecretKey sK, int64_t i) {
+    return sK->t0 + (utime_t)(i * sK->tStep);
 }
 
-int64_t _ctPublicKey_interval_for_time(ctPublicKey pK, int64_t t) {
+int64_t _ctPublicKey_interval_for_time(ctPublicKey pK, utime_t t) {
     if (t >= pK->t0) {
-        return (t - pK->t0) / pK->tStep;
+        return (int64_t)((t - pK->t0) / pK->tStep);
     } else {
         return -1;
     }
 }
 
-int64_t _ctPublicKey_time_for_interval(ctPublicKey pK, int64_t i) {
-    return pK->t0 + (i * pK->tStep);
+utime_t _ctPublicKey_time_for_interval(ctPublicKey pK, int64_t i) {
+    return pK->t0 + (utime_t)(i * pK->tStep);
 }
 
-void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep) {
-    struct timeval tv;
+void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int order, utime_t tStep) {
     int qb, rb, d, o;
     _ed25519pk test_mul;
 
@@ -136,8 +136,7 @@ void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int o
     CHKPKE_init_Gen(sK->chk_sec, qb, rb, d, o);
 
     // key is not defined for time before t0
-    gettimeofday(&tv, NULL);
-    sK->t0 = (1000000 * ((int64_t)tv.tv_sec)) + ((int64_t)tv.tv_usec);
+    sK->t0 = getutime();
 
     if (tStep > 0) {
         sK->tStep = tStep;
@@ -208,7 +207,7 @@ static int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t
 
 extern const asn1_static_node ciphrtxt_asn1_tab[];
 
-unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart, int64_t tEnd, size_t *sz) {
+unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, utime_t tStart, utime_t tEnd, size_t *sz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE sK_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -241,6 +240,7 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart
     //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
     //printf("-----------------\n");
 
+    sum += _asn1_write_int64_as_integer(sK_asn1, "version", 1);
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "addr_sec", sK->addr_sec, sizeof(sK->addr_sec));
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "enc_sec", sK->enc_sec, sizeof(sK->enc_sec));
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "sign_sec", sK->sign_sec, sizeof(sK->sign_sec));
@@ -251,8 +251,8 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart
         return NULL;
     }
     sum += _asn1_write_uchar_string_as_octet_string(sK_asn1, "chk_sec", buffer, length);
-    sum += _asn1_write_int64_as_integer(sK_asn1, "t0", sK->t0);
-    sum += _asn1_write_int64_as_integer(sK_asn1, "tStep", sK->tStep);
+    sum += _asn1_write_int64_as_integer(sK_asn1, "t0", (int64_t)(sK->t0));
+    sum += _asn1_write_int64_as_integer(sK_asn1, "tStep", (int64_t)(sK->tStep));
 
     //printf("-----------------\n");
     //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
@@ -280,8 +280,8 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, int64_t tStart
     return buffer;
 }
 
-unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, int64_t tStart, size_t *sz) {
-    int64_t tEnd;
+unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, utime_t tStart, size_t *sz) {
+    utime_t tEnd;
     
     tEnd = _ctSecretKey_time_for_interval(sK, sK->_intervalMax - 1);
     return ctSecretKey_Export_FS_Delegate_DER(sK, tStart, tEnd, sz);
@@ -321,7 +321,6 @@ static int _asn1_read_int64_from_integer(int64_t *value, asn1_node root, char *a
     uint64_t uvalue = 0;
     //char *buffer;
 
-    assert(sizeof(int64_t) == 8);
     // call read_value with NULL buffer to get length
     length = 0;
     result = asn1_read_value(root, attribute, NULL, &length);
@@ -387,6 +386,13 @@ int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz) 
     //asn1_print_structure(stdout, sK_asn1, "", ASN1_PRINT_ALL);
     //printf("-----------------\n");
 
+    {
+        int64_t ver;
+        result = _asn1_read_int64_from_integer(&ver, sK_asn1, "version");
+        // version 1 is only known version at this time
+        if ((result != 0) || (ver != 1)) goto error_cleanup3;
+    }
+
     // Read secret key from ASN1 structure
     buffer = _asn1_read_octet_string(sK_asn1, "addr_sec", &sz);
     if (sz != sizeof(sK->addr_sec)) goto error_cleanup1;
@@ -435,6 +441,8 @@ error_cleanup2:
 error_cleanup1:
     memset((void *)buffer, 0, sz);
     memset((void *)sK, 0, sizeof(*sK));
+
+error_cleanup3:
     asn1_delete_structure(&sK_asn1);
     asn1_delete_structure(&ct_asn1);
     return -1;
@@ -485,6 +493,7 @@ unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
     //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
     //printf("-----------------\n");
 
+    sum += _asn1_write_int64_as_integer(pK_asn1, "version", 1);
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "addr_pub", pK->addr_pub, sizeof(pK->addr_pub));
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "enc_pub", pK->enc_pub, sizeof(pK->enc_pub));
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "sign_pub", pK->sign_pub, sizeof(pK->sign_pub));
@@ -495,8 +504,8 @@ unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
         return NULL;
     }
     sum += _asn1_write_uchar_string_as_octet_string(pK_asn1, "chk_pub", buffer, length);
-    sum += _asn1_write_int64_as_integer(pK_asn1, "t0", pK->t0);
-    sum += _asn1_write_int64_as_integer(pK_asn1, "tStep", pK->tStep);
+    sum += _asn1_write_int64_as_integer(pK_asn1, "t0", (int64_t)(pK->t0));
+    sum += _asn1_write_int64_as_integer(pK_asn1, "tStep", (int64_t)(pK->tStep));
 
     //printf("-----------------\n");
     //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
@@ -554,7 +563,14 @@ int ctPublicKey_init_decode_DER(ctPublicKey pK, unsigned char *der, size_t dsz) 
     //asn1_print_structure(stdout, pK_asn1, "", ASN1_PRINT_ALL);
     //printf("-----------------\n");
 
-    // Read secret key from ASN1 structure
+    {
+        int64_t ver;
+        result = _asn1_read_int64_from_integer(&ver, pK_asn1, "version");
+        // version 1 is only known version at this time
+        if ((result != 0) || (ver != 1)) goto error_cleanup3;
+    }
+
+    // Read public key from ASN1 structure
     buffer = _asn1_read_octet_string(pK_asn1, "addr_pub", &sz);
     if (sz != sizeof(pK->addr_pub)) goto error_cleanup1;
     memcpy((void *)pK->addr_pub, (void *)buffer, sz);
@@ -598,6 +614,7 @@ error_cleanup2:
 error_cleanup1:
     memset((void *)buffer, 0, sz);
     memset((void *)pK, 0, sizeof(*pK));
+error_cleanup3:
     asn1_delete_structure(&pK_asn1);
     asn1_delete_structure(&ct_asn1);
     return -1;

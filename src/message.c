@@ -52,7 +52,7 @@ static char *_ct_msg_magic = "\x09\x33\x17";
 static size_t _ct_msg_magic_sz = _CT_MAGIC_BYTES;
 
 // little endian representation of 0x0001 0000 00 (for 1.0.0)
-static unsigned char *_ct_msg_version = (unsigned char *)"\x00\x00\x01\x00\x00";
+static unsigned char *_ct_msg_version = (unsigned char *)"\x00\x00\x00\x01\x00";
 static size_t _ct_msg_version_sz = _CT_VERSION_BYTES;
 
 static char *_ct_msg_default_mime = "text/plain";
@@ -151,9 +151,7 @@ unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fr
     if (timestamp > 0) {
         msg->hdr->msgtime_usec = timestamp;
     } else {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        msg->hdr->msgtime_usec = (1000000 * ((int64_t)tv.tv_sec)) + ((int64_t)tv.tv_usec);
+        msg->hdr->msgtime_usec = getutime();
     }
 
     if (ttl > 0) {
@@ -342,7 +340,6 @@ unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fr
         unsigned char shared_sign_pub[crypto_sign_PUBLICKEYBYTES];
         _ed25519pk      sig_ecdh;
         _ed25519pk      sZero;
-        ctPostageHash ptgt;
         
         memset(sZero, 0, sizeof(sZero));
         assert(memcmp(msg->secrets->sig_sec, sZero, sizeof(sZero)) != 0);
@@ -353,23 +350,17 @@ unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fr
         crypto_generichash(shared_seed, sizeof(shared_seed), sig_ecdh, sizeof(sig_ecdh), NULL, 0);
         crypto_sign_seed_keypair(shared_sign_pub, shared_sign_sec, shared_seed);
 
-        status = ctPostage_hash_target(ptgt, rate, msg->hdr->payload_blocks + 1);
         do {
-            ctPostageHash hash;
             // sign ... signature is probablistic, so in theory if no nonce could satisfy the postage target
             // then simply generating a new signature adds bits to the nonce. Nevertheless the nonce is a 64-bit
             // value and the postage rate should not in practice be that high
-            crypto_sign_detached(msg->hdr->header_signature, NULL, (unsigned char *)msg->hdr, _CT_HDR_SIGD_SZ, shared_sign_sec);
+            status = crypto_sign_detached(msg->hdr->header_signature, NULL, (unsigned char *)msg->hdr, _CT_HDR_SIGD_SZ, shared_sign_sec);
+            // key previously validated, should be no failure case
+            assert(status == 0);
 
             // calculate postage hash target (hashcash style)
-            assert(status == 0);
-            // TODO : hash to postage target
-            for (msg->hdr->nonce = 0; msg->hdr->nonce < ULLONG_MAX; msg->hdr->nonce++) {
-                crypto_generichash(hash, sizeof(hash), (void *)msg->hdr, sizeof(msg->hdr), NULL, 0);
-                status = ctPostage_hash_cmp(hash, ptgt);
-                if (status < 0) break;
-            }
-        } while (status >= 0);
+            status = ctMessage_rehash(msg, rate);
+        } while (status != 0);
     }
 
     // copy now-complete single-block header into message
@@ -588,6 +579,22 @@ void ctMessage_clear(ctMessage msg) {
     free(msg->ptext);
     free(msg->fsk);
     memset(msg, 0, sizeof(msg));
+}
+
+int ctMessage_rehash(ctMessage msg, ctPostageRate rate) {
+    ctPostageHash ptgt;
+    ctPostageHash hash;
+    int status;
+
+    status = ctPostage_hash_target(ptgt, rate, msg->hdr->payload_blocks + 1);
+    // calculate postage hash target (hashcash style)
+    for (msg->hdr->nonce = 0; msg->hdr->nonce < ULLONG_MAX; msg->hdr->nonce++) {
+        crypto_generichash(hash, sizeof(hash), (void *)msg->hdr, sizeof(msg->hdr), NULL, 0);
+        status = ctPostage_hash_cmp(hash, ptgt);
+        if (status < 0) return 0;
+    }
+
+    return -1;
 }
 
 // return a pointer and length for the message plaintext.

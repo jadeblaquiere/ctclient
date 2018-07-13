@@ -166,6 +166,9 @@ int ctMessage_init_Dec(ctMessage msg, ctSecretKey toK, unsigned char *ctext, siz
 // clear message and clear/free all allocated data.
 void ctMessage_clear(ctMessage msg);
 
+// find a nonce which satisfies postage requirement
+int ctMessage_rehash(ctMessage msg, ctPostageRate rate);
+
 // NOTE :: for the following convenience routines, the data returned is
 // embedded in other structured data. You should not write to these locations
 // nor do you need to call free() on the data (to clear and release all memory
