@@ -52,4 +52,18 @@ CTPublicKey ::= SEQUENCE {
     tStep       INTEGER
 }
 
+CTNAKSecretKey ::= SEQUENCE {
+    version     INTEGER,
+    secret_key  OCTET STRING,
+    not_before  INTEGER,
+    not_after   INTEGER
+}
+
+CTNAKPublicKey ::= SEQUENCE {
+    version     INTEGER,
+    secret_key  OCTET STRING,
+    not_before  INTEGER,
+    not_after   INTEGER
+}
+
 END

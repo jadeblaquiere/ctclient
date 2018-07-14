@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-    
+
     if (filename != NULL) {
         fPtr = fopen(filename, "r");
         if (fPtr == NULL) {
@@ -99,12 +99,12 @@ int main(int argc, char **argv) {
         4294967296.0);
     pr->l2blocks_whole = 0;
     pr->l2blocks_fraction = 0;
-    
+
     ctMessage_rehash(ctM, pr);
 
     // copy it back
     memcpy(ctext, ctM->hdr, _CT_BLKSZ);
-    
+
     status = write_b64wrapped_to_file(stdout, ctext, ctsz, "CIPHRTXT ENCRYPTED MESSAGE");
     if (status != 0) {
         fprintf(stderr, "<WriteError>: Error writing output\n");
