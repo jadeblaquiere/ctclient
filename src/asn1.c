@@ -32,8 +32,10 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <libtasn1.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, unsigned char *buffer, int len) {
     int result;
