@@ -31,7 +31,9 @@
 #include <ciphrtxt/nak.h>
 #include <ciphrtxt/utime.h>
 #include <ecc.h>
+#include <gmp.h>
 #include <inttypes.h>
+#include <sodium.h>
 #include <stdlib.h>
 
 static mpECurve_ptr _secp265k1 = NULL;
@@ -102,8 +104,132 @@ void ctNAKPublicKey_clear(ctNAKPublicKey pnak) {
 //int ctNAKPublicKey_init_import_DER(ctNAKPublicKey snak, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
-//void ctNAKSign(ctNAKSignature sig, ctNAKSecretKey snak, unsigned char *msg, size_t sz);
-//int ctNAKVerify(ctNAKSignature sig, ctNAKPublicKey snak, unsigned char *msg, size_t sz)
+int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey snak, unsigned char *msg, size_t sz) {
+    unsigned char hash[crypto_hash_sha256_BYTES];
+    mpFp_t k_n;
+    mpFp_t r_n;
+    mpFp_t s_n;
+    mpFp_t e_n;
+    mpz_t e;
+    mpz_t r;
+    mpECP_t R;
+    int status;
+
+    if (_secp265k1 == NULL) _secp265k1_curve_init();
+
+    if (sz == 0) return -1;
+
+    mpFp_init(k_n, _secp265k1->n);
+    mpFp_init(r_n, _secp265k1->n);
+    mpFp_init(s_n, _secp265k1->n);
+    mpFp_init(e_n, _secp265k1->n);
+    mpz_init(r);
+    mpz_init(e);
+    mpECP_init(R, _secp265k1);
+
+    crypto_hash_sha256(hash, msg, sz);
+    mpz_import (e, crypto_hash_sha256_BYTES, 1, 1, 1, 0, hash);
+    mpFp_set_mpz(e_n, e, _secp265k1->n);
+new_random:
+    mpFp_urandom(k_n, _secp265k1->n);
+    if (__GMP_UNLIKELY(mpFp_cmp_ui(k_n, 0) == 0)) goto new_random;
+
+    mpECP_scalar_base_mul(R, _secp265k1_base, k_n);
+    mpz_set_mpECP_affine_x(r, R);
+    if (__GMP_UNLIKELY(mpz_cmp_ui(r, 0) == 0)) goto new_random;
+
+    mpFp_set_mpz(r_n, r, _secp265k1->n);
+    mpFp_mul(s_n, r_n, snak->secret_key);
+    mpFp_add(s_n, s_n, e_n);
+    status = mpFp_inv(e_n, k_n);
+    if (status != 0) goto new_random;
+    mpFp_mul(s_n, s_n, e_n);
+    if (__GMP_UNLIKELY(mpFp_cmp_ui(s_n, 0) == 0)) goto new_random;
+
+    mpFp_init(sig->r, _secp265k1->n);
+    mpFp_init(sig->s, _secp265k1->n);
+    
+    mpFp_set(sig->r, r_n);
+    mpFp_set(sig->s, s_n);
+
+    mpECP_clear(R);
+    mpz_clear(e);
+    mpz_clear(r);
+    mpFp_clear(e_n);
+    mpFp_clear(s_n);
+    mpFp_clear(r_n);
+    mpFp_clear(k_n);
+    return 0;
+}
+
+int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey snak, unsigned char *msg, size_t sz) {
+    unsigned char hash[crypto_hash_sha256_BYTES];
+    mpFp_t w;
+    mpFp_t u1;
+    mpFp_t u2;
+    mpFp_t e_n;
+    mpFp_t p_n;
+    mpz_t e;
+    mpECP_t P;
+    mpECP_t Pq;
+    int status;
+
+    if (_secp265k1 == NULL) _secp265k1_curve_init();
+
+    if (sz == 0) return -1;
+
+    // validate signature input, presume public key was validated at import
+    if ((mpz_cmp(sig->r->fp->p, _secp265k1->n) != 0) || 
+        (mpz_cmp(sig->s->fp->p, _secp265k1->n) != 0)) {
+        return -1;
+    }
+
+    if ((mpFp_cmp_ui(sig->r, 0) == 0) || (mpFp_cmp_ui(sig->s, 0) == 0)) {
+        return -1;
+    }
+
+    mpz_init(e);
+    mpFp_init_fp(p_n, _secp265k1->fp);
+    mpFp_init(e_n, _secp265k1->n);
+    mpFp_init(w, _secp265k1->n);
+    mpFp_init(u1, _secp265k1->n);
+    mpFp_init(u2, _secp265k1->n);
+    mpECP_init(P, _secp265k1);
+    mpECP_init(Pq, _secp265k1);
+
+    crypto_hash_sha256(hash, msg, sz);
+    mpz_import (e, crypto_hash_sha256_BYTES, 1, 1, 1, 0, hash);
+    mpFp_set_mpz(e_n, e, _secp265k1->n);
+    mpFp_inv(w, sig->s);
+    mpFp_mul(u1, e_n, w);
+    mpFp_mul(u2, sig->r, w);
+    mpECP_scalar_base_mul(P, _secp265k1_base, u1);
+    mpECP_scalar_mul(Pq, snak->public_key, u2);
+    mpECP_add(P, P, Pq);
+    mpz_set_mpECP_affine_x(e, P);
+    mpFp_set_mpz(p_n, e, _secp265k1->n);
+
+    status = mpFp_cmp(p_n, sig->r);
+
+    mpECP_clear(Pq);
+    mpECP_clear(P);
+    mpFp_clear(u2);
+    mpFp_clear(u1);
+    mpFp_clear(w);
+    mpFp_clear(e_n);
+    mpFp_clear(p_n);
+    mpz_clear(e);
+
+    return status;
+}
+
+//unsigned char *ctNAKSignature_export_bytes(ctNAKSignature sig, size_t *sz);
+//int ctNAKSignature_init_import_bytes(ctNAKSignature sig, unsigned char *bsig, size_t sz);
+
+void ctNAKSignature_clear(ctNAKSignature sig) {
+    mpFp_clear(sig->r);
+    mpFp_clear(sig->s);
+}
 
 // signed PUBLIC Key (as present in blockchain xactions)
 //unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey snak, size_t *sz);

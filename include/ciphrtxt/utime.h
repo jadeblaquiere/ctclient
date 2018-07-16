@@ -61,6 +61,14 @@ time_t time_t_from_utime(utime_t utm);
 // works just like strftime but adds %Q tag for 6 digit milliseconds
 size_t utime_strftime(char *s, size_t max, char *format, utime_t utm);
 
+// handy constants for larger time units
+
+#define UTIME_SECONDS   (1000000U)
+#define UTIME_MINUTES   (60 * UTIME_SECONDS)
+#define UTIME_HOURS     (60 * UTIME_MINUTES)
+#define UTIME_DAYS      (24 * UTIME_HOURS)
+#define UTIME_WEEKS     (7 * UTIME_MINUTES)
+
 #ifdef __cplusplus
 }
 #endif

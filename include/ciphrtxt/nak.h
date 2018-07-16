@@ -80,8 +80,11 @@ unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pnak, size_t *sz);
 int ctNAKPublicKey_init_import_DER(ctNAKPublicKey snak, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
-void ctNAKSign(ctNAKSignature sig, ctNAKSecretKey snak, unsigned char *msg, size_t sz);
-int ctNAKVerify(ctNAKSignature sig, ctNAKPublicKey snak, unsigned char *msg, size_t sz);
+int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey snak, unsigned char *msg, size_t sz);
+int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey snak, unsigned char *msg, size_t sz);
+unsigned char *ctNAKSignature_export_bytes(ctNAKSignature sig, size_t *sz);
+int ctNAKSignature_init_import_bytes(ctNAKSignature sig, unsigned char *bsig, size_t sz);
+void ctNAKSignature_clear(ctNAKSignature sig);
 
 // signed PUBLIC Key (as present in blockchain xactions)
 unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey snak, size_t *sz);
