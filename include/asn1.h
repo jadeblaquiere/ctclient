@@ -31,6 +31,7 @@
 #ifndef _CIPHRTXT_ASN1_H_INCLUDED_
 #define _CIPHRTXT_ASN1_H_INCLUDED_
 
+#include <gmp.h>
 #include <inttypes.h>
 #include <libtasn1.h>
 
@@ -45,6 +46,9 @@ int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t value)
 
 unsigned char *_asn1_read_octet_string_as_uchar(asn1_node root, char *attribute, size_t *sz);
 int _asn1_read_int64_from_integer(int64_t *value, asn1_node root, char *attribute);
+
+int _asn1_write_mpz_as_octet_string(asn1_node root, char *attribute, mpz_t value);
+int _asn1_read_mpz_from_octet_string(mpz_t value, asn1_node root, char *attribute);
 
 #ifdef __cplusplus
 }

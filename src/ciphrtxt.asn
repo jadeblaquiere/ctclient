@@ -61,7 +61,7 @@ CTNAKSecretKey ::= SEQUENCE {
 
 CTNAKPublicKey ::= SEQUENCE {
     version     INTEGER,
-    secret_key  OCTET STRING,
+    public_key  OCTET STRING,
     not_before  INTEGER,
     not_after   INTEGER
 }

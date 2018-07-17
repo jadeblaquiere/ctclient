@@ -68,27 +68,27 @@ typedef _ctNAKSignature ctNAKSignature[1];
 typedef _ctNAKSignature *ctNAKSignature_ptr;
 
 // create, delete, import export for SECRET Key
-void ctNAKSecretKey_init_Gen(ctNAKSecretKey snak, utime_t nvb, utime_t nva);
-void ctNAKSecretKey_clear(ctNAKSecretKey snak);
-unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey snak, size_t *sz);
-int ctNAKSecretKey_init_import_DER(ctNAKSecretKey snak, unsigned char *der, size_t sz);
+void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva);
+void ctNAKSecretKey_clear(ctNAKSecretKey sN);
+unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey sN, size_t *sz);
+int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t sz);
 
 // create, delete, import export for PUBLIC Key
-void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pnak, ctNAKSecretKey snak);
-void ctNAKPublicKey_clear(ctNAKPublicKey pnak);
-unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pnak, size_t *sz);
-int ctNAKPublicKey_init_import_DER(ctNAKPublicKey snak, unsigned char *der, size_t sz);
+void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN);
+void ctNAKPublicKey_clear(ctNAKPublicKey pN);
+unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz);
+int ctNAKPublicKey_init_import_DER(ctNAKPublicKey sN, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
-int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey snak, unsigned char *msg, size_t sz);
-int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey snak, unsigned char *msg, size_t sz);
+int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz);
+int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey sN, unsigned char *msg, size_t sz);
 unsigned char *ctNAKSignature_export_bytes(ctNAKSignature sig, size_t *sz);
 int ctNAKSignature_init_import_bytes(ctNAKSignature sig, unsigned char *bsig, size_t sz);
 void ctNAKSignature_clear(ctNAKSignature sig);
 
 // signed PUBLIC Key (as present in blockchain xactions)
-unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey snak, size_t *sz);
-int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pnak, unsigned char *bin, size_t sz);
+unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
+int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
 
 #ifdef __cplusplus
 }

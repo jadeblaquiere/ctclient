@@ -41,6 +41,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+extern const asn1_static_node ciphrtxt_asn1_tab[];
+
 //The default configuration parameters provide for 512 bit prime field with
 //384 bit group order. 
 
@@ -152,8 +154,6 @@ void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int o
 void ctSecretKey_clear(ctSecretKey sK) {
     CHKPKE_clear(sK->chk_sec);
 }
-
-extern const asn1_static_node ciphrtxt_asn1_tab[];
 
 unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, utime_t tStart, utime_t tEnd, size_t *sz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;

@@ -85,6 +85,39 @@ START_TEST(test_sign_verify)
     ctNAKSecretKey_clear(sN);
 END_TEST
 
+START_TEST(test_export_import)
+    ctNAKSecretKey sN;
+    ctNAKSecretKey sNcp;
+    utime_t not_valid_before;
+    utime_t not_valid_after;
+    unsigned char *der;
+    size_t sz;
+    int status;
+
+    not_valid_before = getutime();
+    not_valid_after = not_valid_before + (52 * UTIME_WEEKS);
+
+    ctNAKSecretKey_init_Gen(sN, not_valid_before, not_valid_after);
+    der = ctNAKSecretKey_export_DER(sN, &sz);
+    assert(der != NULL);
+    printf("NAK der (%zd bytes) =", sz);
+    {
+        int i;
+        for (i = 0; i < sz; i++) {
+            printf("%02X", der[i]);
+        }
+    }
+    printf("\n");
+    status = ctNAKSecretKey_init_import_DER(sNcp, der, sz);
+    assert (status == 0);
+    assert(mpFp_cmp(sN->secret_key, sNcp->secret_key) == 0);
+    assert(sN->not_valid_before == sNcp->not_valid_before);
+    assert(sN->not_valid_after == sNcp->not_valid_after);
+
+    ctNAKSecretKey_clear(sN);
+    ctNAKSecretKey_clear(sNcp);
+END_TEST
+
 static Suite *mpCT_test_suite(void) {
     Suite *s;
     TCase *tc;
@@ -94,6 +127,7 @@ static Suite *mpCT_test_suite(void) {
 
     tcase_add_test(tc, test_init_clear);
     tcase_add_test(tc, test_sign_verify);
+    tcase_add_test(tc, test_export_import);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

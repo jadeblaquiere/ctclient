@@ -28,16 +28,20 @@
 //OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <asn1.h>
 #include <ciphrtxt/nak.h>
 #include <ciphrtxt/utime.h>
 #include <ecc.h>
 #include <gmp.h>
 #include <inttypes.h>
+#include <libtasn1.h>
 #include <sodium.h>
 #include <stdlib.h>
 
 static mpECurve_ptr _secp265k1 = NULL;
 static mpECP_ptr _secp265k1_base = NULL;
+
+extern const asn1_static_node ciphrtxt_asn1_tab[];
 
 static void _secp265k1_curve_clear(void) {
     assert(_secp265k1 != NULL);
@@ -65,46 +69,179 @@ static void _secp265k1_curve_init(void) {
 }
 
 // create, delete, import export for SECRET Key
-void ctNAKSecretKey_init_Gen(ctNAKSecretKey snak, utime_t nvb, utime_t nva) {
+void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva) {
     if (_secp265k1 == NULL) _secp265k1_curve_init();
-    snak->not_valid_before = nvb;
-    snak->not_valid_after = nva;
-    mpFp_init(snak->secret_key, _secp265k1->n);
-    mpFp_urandom(snak->secret_key, _secp265k1->n);
+    sN->not_valid_before = nvb;
+    sN->not_valid_after = nva;
+    mpFp_init(sN->secret_key, _secp265k1->n);
+    mpFp_urandom(sN->secret_key, _secp265k1->n);
     return;
 }
 
-void ctNAKSecretKey_clear(ctNAKSecretKey snak) {
-    snak->not_valid_before = 0;
-    snak->not_valid_after = 0;
-    mpFp_clear(snak->secret_key);
+void ctNAKSecretKey_clear(ctNAKSecretKey sN) {
+    sN->not_valid_before = 0;
+    sN->not_valid_after = 0;
+    mpFp_clear(sN->secret_key);
     return;
 }
 
-//unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey snak, size_t *sz);
-//int ctNAKSecretKey_init_import_DER(ctNAKSecretKey snak, unsigned char *der, size_t sz);
+unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey sN, size_t *sz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE sN_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    int status;
+    size_t length;
+    int sum;
+    mpz_t tmpz;
 
-void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pnak, ctNAKSecretKey snak) {
+    sum = 0;
+
+    status = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (status != 0) return NULL;
+
+    status = asn1_create_element(ct_asn1, "Ciphrtxt.CTNAKSecretKey",
+        &sN_asn1);
+    if (status != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+
+    mpz_init(tmpz);
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sN_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    sum += _asn1_write_int64_as_integer(sN_asn1, "version", 1);
+    mpz_set_mpFp(tmpz, sN->secret_key);
+    sum += _asn1_write_mpz_as_octet_string(sN_asn1, "secret_key", tmpz);
+    sum += _asn1_write_int64_as_integer(sN_asn1, "not_before", (int64_t)(sN->not_valid_before));
+    sum += _asn1_write_int64_as_integer(sN_asn1, "not_after", (int64_t)(sN->not_valid_after));
+
+    mpz_clear(tmpz);
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sN_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    sum += 256;  // pad for DER header + some extra just in case
+    length = sum;
+    buffer = (unsigned char *)malloc((sum) * sizeof(char));
+    assert(buffer != NULL);
+    {
+        int isz = length;
+        status = asn1_der_coding(sN_asn1, "", (char *)buffer, &isz, asnError);
+        length = isz;
+    }
+
+    asn1_delete_structure(&sN_asn1);
+    asn1_delete_structure(&ct_asn1);
+
+    if (status != 0) {
+        return NULL;
+    }
+    assert(length < sum);
+
+    *sz = length;
+    return buffer;
+}
+
+int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t dsz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE sN_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    int status;
+    mpz_t tmpz;
+
     if (_secp265k1 == NULL) _secp265k1_curve_init();
-    pnak->not_valid_before = snak->not_valid_before;
-    pnak->not_valid_after = snak->not_valid_after;
-    mpECP_init(pnak->public_key, _secp265k1);
-    mpECP_scalar_base_mul(pnak->public_key, _secp265k1_base, snak->secret_key);
+
+    status = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (status != 0) return -1;
+
+    status = asn1_create_element(ct_asn1, "Ciphrtxt.CTNAKSecretKey",
+        &sN_asn1);
+    if (status != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return -1;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sN_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // read DER into ASN1 structure
+    status = asn1_der_decoding(&sN_asn1, (char *)der, (int)dsz, asnError);
+    if (status != ASN1_SUCCESS) return -1;
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, sN_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    {
+        int64_t ver;
+        status = _asn1_read_int64_from_integer(&ver, sN_asn1, "version");
+        // version 1 is only known version at this time
+        if ((status != 0) || (ver != 1)) goto error_cleanup3;
+    }
+
+    // Read secret key from ASN1 structure
+    
+    mpz_init(tmpz);
+    mpFp_init(sN->secret_key, _secp265k1->n);
+    status = _asn1_read_mpz_from_octet_string(tmpz, sN_asn1, "secret_key");
+    if (status != 0) {
+        mpz_clear(tmpz);
+        goto error_cleanup2;
+    }
+    mpFp_set_mpz(sN->secret_key, tmpz, _secp265k1->n);
+    mpz_clear(tmpz);
+
+    status = _asn1_read_int64_from_integer(&(sN->not_valid_before), sN_asn1, "not_before");
+    if (status != 0) goto error_cleanup2;
+
+    status = _asn1_read_int64_from_integer(&(sN->not_valid_after), sN_asn1, "not_after");
+    if (status != 0) goto error_cleanup2;
+
+    asn1_delete_structure(&sN_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return 0;
+
+error_cleanup2:
+    mpFp_clear(sN->secret_key);
+    sN->not_valid_before = 0;
+    sN->not_valid_after = 0;
+    asn1_delete_structure(&sN_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
+
+error_cleanup3:
+    asn1_delete_structure(&sN_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
+}
+
+void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN) {
+    if (_secp265k1 == NULL) _secp265k1_curve_init();
+    pN->not_valid_before = sN->not_valid_before;
+    pN->not_valid_after = sN->not_valid_after;
+    mpECP_init(pN->public_key, _secp265k1);
+    mpECP_scalar_base_mul(pN->public_key, _secp265k1_base, sN->secret_key);
     return;
 }
 
-void ctNAKPublicKey_clear(ctNAKPublicKey pnak) {
-    pnak->not_valid_before = 0;
-    pnak->not_valid_after = 0;
-    mpECP_clear(pnak->public_key);
+void ctNAKPublicKey_clear(ctNAKPublicKey pN) {
+    pN->not_valid_before = 0;
+    pN->not_valid_after = 0;
+    mpECP_clear(pN->public_key);
     return;
 }
 
-//unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pnak, size_t *sz);
-//int ctNAKPublicKey_init_import_DER(ctNAKPublicKey snak, unsigned char *der, size_t sz);
+//unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz);
+//int ctNAKPublicKey_init_import_DER(ctNAKPublicKey sN, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
-int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey snak, unsigned char *msg, size_t sz) {
+int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz) {
     unsigned char hash[crypto_hash_sha256_BYTES];
     mpFp_t k_n;
     mpFp_t r_n;
@@ -139,7 +276,7 @@ new_random:
     if (__GMP_UNLIKELY(mpz_cmp_ui(r, 0) == 0)) goto new_random;
 
     mpFp_set_mpz(r_n, r, _secp265k1->n);
-    mpFp_mul(s_n, r_n, snak->secret_key);
+    mpFp_mul(s_n, r_n, sN->secret_key);
     mpFp_add(s_n, s_n, e_n);
     status = mpFp_inv(e_n, k_n);
     if (status != 0) goto new_random;
@@ -148,7 +285,7 @@ new_random:
 
     mpFp_init(sig->r, _secp265k1->n);
     mpFp_init(sig->s, _secp265k1->n);
-    
+
     mpFp_set(sig->r, r_n);
     mpFp_set(sig->s, s_n);
 
@@ -162,7 +299,7 @@ new_random:
     return 0;
 }
 
-int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey snak, unsigned char *msg, size_t sz) {
+int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey sN, unsigned char *msg, size_t sz) {
     unsigned char hash[crypto_hash_sha256_BYTES];
     mpFp_t w;
     mpFp_t u1;
@@ -204,7 +341,7 @@ int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey snak, unsigned 
     mpFp_mul(u1, e_n, w);
     mpFp_mul(u2, sig->r, w);
     mpECP_scalar_base_mul(P, _secp265k1_base, u1);
-    mpECP_scalar_mul(Pq, snak->public_key, u2);
+    mpECP_scalar_mul(Pq, sN->public_key, u2);
     mpECP_add(P, P, Pq);
     mpz_set_mpECP_affine_x(e, P);
     mpFp_set_mpz(p_n, e, _secp265k1->n);
@@ -232,5 +369,5 @@ void ctNAKSignature_clear(ctNAKSignature sig) {
 }
 
 // signed PUBLIC Key (as present in blockchain xactions)
-//unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey snak, size_t *sz);
-//int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pnak, unsigned char *bin, size_t sz);
+//unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
+//int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);

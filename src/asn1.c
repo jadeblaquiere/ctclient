@@ -30,6 +30,7 @@
 
 #include <asn1.h>
 #include <assert.h>
+#include <gmp.h>
 #include <inttypes.h>
 #include <libtasn1.h>
 #include <stdlib.h>
@@ -159,3 +160,58 @@ int _asn1_read_int64_from_integer(int64_t *value, asn1_node root, char *attribut
     return 0;
 }
 
+int _asn1_write_mpz_as_octet_string(asn1_node root, char *attribute, mpz_t value) {
+    size_t length;
+    int result;
+    size_t lwrote;
+    char *buffer;
+
+    length = (mpz_sizeinbase(value, 2) + 7) >> 3;
+    //printf("trying to alloc %ld bytes\n", length + 1);
+    buffer = (char *)malloc((length+1)*sizeof(char));
+    assert(buffer != NULL);
+    mpz_export(buffer, &lwrote, 1, sizeof(char), 0, 0, value);
+    assert(lwrote == length);
+    result = asn1_write_value(root, attribute, buffer, lwrote);
+    //if (result != ASN1_SUCCESS) {
+    //    int i;
+    //    printf("error writing ");
+    //    for (i = 0; i < lwrote; i++) {
+    //        printf("%02X", buffer[i]);
+    //    }
+    //    printf(" to tag : %s\n", attribute);
+    //}
+    assert(result == ASN1_SUCCESS);
+    free(buffer);
+    return 5 + length;
+}
+
+int _asn1_read_mpz_from_octet_string(mpz_t value, asn1_node root, char *attribute) {
+    int result, length, lread;
+    char *buffer;
+
+    // call read_value with NULL buffer to get length
+    length = 0;
+    result = asn1_read_value(root, attribute, NULL, &length);
+    //printf("result = %d\n", result);
+    if (result != ASN1_MEM_ERROR) return -1;
+    //assert(result == ASN1_MEM_ERROR);
+    if (length <= 0) return -1;
+    //assert(length > 0);
+    // allocate
+    buffer = (char *)malloc((length+1)*sizeof(char));
+    assert(buffer != NULL);
+    lread = length + 1;
+    result = asn1_read_value(root, attribute, buffer, &lread);
+    if (result != ASN1_SUCCESS) goto cleanup_on_error;
+    //assert(result == 0);
+    if (lread != length) goto cleanup_on_error;
+    //assert(lread == length);
+    mpz_import(value, lread, 1, sizeof(char), 0, 0, buffer);
+    free(buffer);
+    return 0;
+    
+cleanup_on_error:
+    free(buffer);
+    return -1;
+}
