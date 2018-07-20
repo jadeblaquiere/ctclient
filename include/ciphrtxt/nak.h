@@ -80,7 +80,7 @@ int ctNAKPublicKey_init_import_DER(ctNAKPublicKey sN, unsigned char *der, size_t
 
 // ECDSA Signatures
 int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz);
-int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey sN, unsigned char *msg, size_t sz);
+int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz);
 unsigned char *ctNAKSignature_export_bytes(ctNAKSignature sig, size_t *sz);
 int ctNAKSignature_init_import_bytes(ctNAKSignature sig, unsigned char *bsig, size_t sz);
 void ctNAKSignature_clear(ctNAKSignature sig);

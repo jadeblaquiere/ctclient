@@ -446,7 +446,7 @@ new_random:
     return 0;
 }
 
-int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey sN, unsigned char *msg, size_t sz) {
+int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz) {
     unsigned char hash[crypto_hash_sha256_BYTES];
     mpFp_t w;
     mpFp_t u1;
@@ -488,7 +488,7 @@ int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey sN, unsigned ch
     mpFp_mul(u1, e_n, w);
     mpFp_mul(u2, sig->r, w);
     mpECP_scalar_base_mul(P, _secp265k1_base, u1);
-    mpECP_scalar_mul(Pq, sN->public_key, u2);
+    mpECP_scalar_mul(Pq, pN->public_key, u2);
     mpECP_add(P, P, Pq);
     mpz_set_mpECP_affine_x(e, P);
     mpFp_set_mpz(p_n, e, _secp265k1->n);
