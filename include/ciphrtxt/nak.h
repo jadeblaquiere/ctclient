@@ -40,7 +40,6 @@ extern "C" {
 
 /* Network Access Keys */ 
 
-
 typedef struct {
     mpFp_t  secret_key;
     utime_t not_valid_before;
@@ -89,6 +88,7 @@ void ctNAKSignature_clear(ctNAKSignature sig);
 // signed PUBLIC Key (as present in blockchain xactions)
 unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
 int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
+int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
 
 #ifdef __cplusplus
 }

@@ -39,7 +39,7 @@
 #include <string.h>
 #include <time.h>
 
-#define TEST_ITERATIONS (100)
+#define TEST_ITERATIONS (1000)
 
 START_TEST(test_init_clear)
     ctNAKSecretKey sN;
@@ -73,12 +73,22 @@ START_TEST(test_sign_verify)
 
     for (i = 0; i < TEST_ITERATIONS; i++) {
         unsigned char random_data[512];
-        
+        unsigned char *bsig;
+        size_t bssz;
+        ctNAKSignature sigcp;
+
         randombytes_buf(random_data, 512);
         status = ctNAKSignature_init_Sign(sig, sN, random_data, 512);
         assert(status == 0);
         status = ctNAKSignature_verify_cmp(sig, pN, random_data, 512);
         assert(status == 0);
+
+        bsig = ctNAKSignature_export_bytes(sig, &bssz);
+        status = ctNAKSignature_init_import_bytes(sigcp, bsig, bssz);
+        assert(status == 0);
+        assert(mpFp_cmp(sigcp->r, sig->r) == 0);
+        assert(mpFp_cmp(sigcp->s, sig->s) == 0);
+        free(bsig);
     }
 
     ctNAKPublicKey_clear(pN);
@@ -88,6 +98,8 @@ END_TEST
 START_TEST(test_export_import)
     ctNAKSecretKey sN;
     ctNAKSecretKey sNcp;
+    ctNAKPublicKey pN;
+    ctNAKPublicKey pNcp;
     utime_t not_valid_before;
     utime_t not_valid_after;
     unsigned char *der;
@@ -100,7 +112,7 @@ START_TEST(test_export_import)
     ctNAKSecretKey_init_Gen(sN, not_valid_before, not_valid_after);
     der = ctNAKSecretKey_export_DER(sN, &sz);
     assert(der != NULL);
-    printf("NAK der (%zd bytes) =", sz);
+    printf("NAK SECRET der (%zd bytes) =", sz);
     {
         int i;
         for (i = 0; i < sz; i++) {
@@ -113,7 +125,30 @@ START_TEST(test_export_import)
     assert(mpFp_cmp(sN->secret_key, sNcp->secret_key) == 0);
     assert(sN->not_valid_before == sNcp->not_valid_before);
     assert(sN->not_valid_after == sNcp->not_valid_after);
+    memset(der, 0, sz);
+    free(der);
 
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
+    der = ctNAKPublicKey_export_DER(pN, &sz);
+    assert(der != NULL);
+    printf("NAK PUBLIC der (%zd bytes) =", sz);
+    {
+        int i;
+        for (i = 0; i < sz; i++) {
+            printf("%02X", der[i]);
+        }
+    }
+    printf("\n");
+    status = ctNAKPublicKey_init_import_DER(pNcp, der, sz);
+    assert (status == 0);
+    assert(mpECP_cmp(pN->public_key, pNcp->public_key) == 0);
+    assert(pN->not_valid_before == pNcp->not_valid_before);
+    assert(pN->not_valid_after == pNcp->not_valid_after);
+    memset(der, 0, sz);
+    free(der);
+
+    ctNAKPublicKey_clear(pN);
+    ctNAKPublicKey_clear(pNcp);
     ctNAKSecretKey_clear(sN);
     ctNAKSecretKey_clear(sNcp);
 END_TEST
