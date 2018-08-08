@@ -59,7 +59,7 @@ END_TEST
 START_TEST(test_sign_verify)
     ctNAKSecretKey sN;
     ctNAKPublicKey pN;
-    ctNAKSignature sig;
+    mpECDSASignature_t sig;
     utime_t not_valid_before;
     utime_t not_valid_after;
     int i;
@@ -75,7 +75,7 @@ START_TEST(test_sign_verify)
         unsigned char random_data[512];
         unsigned char *bsig;
         size_t bssz;
-        ctNAKSignature sigcp;
+        mpECDSASignature_t sigcp;
 
         randombytes_buf(random_data, 512);
         status = ctNAKSignature_init_Sign(sig, sN, random_data, 512);

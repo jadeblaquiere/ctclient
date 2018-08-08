@@ -58,14 +58,6 @@ typedef struct {
 typedef _ctNAKPublicKey ctNAKPublicKey[1];
 typedef _ctNAKPublicKey *ctNAKPublicKey_ptr;
 
-typedef struct {
-    mpFp_t  r;
-    mpFp_t  s;
-} _ctNAKSignature;
-
-typedef _ctNAKSignature ctNAKSignature[1];
-typedef _ctNAKSignature *ctNAKSignature_ptr;
-
 // create, delete, import export for SECRET Key
 void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva);
 void ctNAKSecretKey_clear(ctNAKSecretKey sN);
@@ -79,11 +71,11 @@ unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz);
 int ctNAKPublicKey_init_import_DER(ctNAKPublicKey sN, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
-int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz);
-int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz);
-unsigned char *ctNAKSignature_export_bytes(ctNAKSignature sig, size_t *sz);
-int ctNAKSignature_init_import_bytes(ctNAKSignature sig, unsigned char *bsig, size_t sz);
-void ctNAKSignature_clear(ctNAKSignature sig);
+int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz);
+int ctNAKSignature_verify_cmp(mpECDSASignature_t sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz);
+unsigned char *ctNAKSignature_export_bytes(mpECDSASignature_t sig, size_t *sz);
+int ctNAKSignature_init_import_bytes(mpECDSASignature_t sig, unsigned char *bsig, size_t sz);
+void ctNAKSignature_clear(mpECDSASignature_t sig);
 
 // signed PUBLIC Key (as present in blockchain xactions)
 unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);

@@ -39,45 +39,62 @@
 #include <stdlib.h>
 #include <string.h>
 
-static mpECurve_ptr _secp265k1 = NULL;
-static mpECP_ptr _secp265k1_base = NULL;
+static mpECurve_ptr _secp256k1 = NULL;
+static mpECDSAHashfunc_ptr _sha256 = NULL;
+static mpECDSASignatureScheme_ptr _sscheme = NULL;
 
 extern const asn1_static_node ciphrtxt_asn1_tab[];
 
 #define _SECP256_N_BYTES    (32U)
 
-static void _secp265k1_curve_clear(void) {
-    assert(_secp265k1 != NULL);
-    mpECP_clear(_secp265k1_base);
-    mpECurve_clear(_secp265k1);
-    free(_secp265k1_base);
-    free(_secp265k1);
-    _secp265k1 = NULL;
+static void _wrap_libsodium_sha256(unsigned char *hash, unsigned char *msg, size_t sz) {
+    int status;
+    status = crypto_hash_sha256(hash, msg, (unsigned long long)sz);
+    assert(status == 0);
     return;
 }
 
-static void _secp265k1_curve_init(void) {
+static void _sscheme_clear(void) {
+    assert(_sscheme != NULL);
+    mpECDSASignatureScheme_clear(_sscheme);
+    free(_sscheme);
+    _sscheme = NULL;
+    mpECDSAHashfunc_clear(_sha256);
+    free(_sha256);
+    _sha256 = NULL;
+    mpECurve_clear(_secp256k1);
+    free(_secp256k1);
+    _secp256k1 = NULL;
+    return;
+}
+
+static void _sscheme_init(void) {
     int status;
 
-    _secp265k1 = (mpECurve_ptr)malloc(sizeof(mpECurve_t));
-    mpECurve_init(_secp265k1);
-    status = mpECurve_set_named(_secp265k1, "secp256k1");
+    _secp256k1 = (mpECurve_ptr)malloc(sizeof(mpECurve_t));
+    assert(_secp256k1 != NULL);
+    mpECurve_init(_secp256k1);
+    status = mpECurve_set_named(_secp256k1, "secp256k1");
     assert(status == 0);
-    _secp265k1_base = (mpECP_ptr)malloc(sizeof(mpECP_t));
-    mpECP_init(_secp265k1_base, _secp265k1);
-    mpECP_set_mpz(_secp265k1_base, _secp265k1->G[0], _secp265k1->G[1], _secp265k1);
-    mpECP_scalar_base_mul_setup(_secp265k1_base);
-    atexit(&_secp265k1_curve_clear);
+    _sha256 = (mpECDSAHashfunc_ptr)malloc(sizeof(mpECDSAHashfunc_t));
+    assert(_sha256 != NULL);
+    mpECDSAHashfunc_init(_sha256);
+    _sha256->dohash = _wrap_libsodium_sha256;
+    _sha256->hsz = crypto_hash_sha256_BYTES;
+    _sscheme = (mpECDSASignatureScheme_ptr)malloc(sizeof(mpECDSASignatureScheme_t));
+    assert(_sscheme != NULL);
+    mpECDSASignatureScheme_init(_sscheme, _secp256k1, _sha256);
+    atexit(&_sscheme_clear);
     return;
 }
 
 // create, delete, import export for SECRET Key
 void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva) {
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
+    if (_sscheme == NULL) _sscheme_init();
     sN->not_valid_before = nvb;
     sN->not_valid_after = nva;
-    mpFp_init(sN->secret_key, _secp265k1->n);
-    mpFp_urandom(sN->secret_key, _secp265k1->n);
+    mpFp_init(sN->secret_key, _sscheme->cvp->n);
+    mpFp_urandom(sN->secret_key, _sscheme->cvp->n);
     return;
 }
 
@@ -157,7 +174,7 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t
     int status;
     mpz_t tmpz;
 
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
+    if (_sscheme == NULL) _sscheme_init();
 
     status = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
     if (status != 0) return -1;
@@ -191,13 +208,13 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t
     // Read secret key from ASN1 structure
 
     mpz_init(tmpz);
-    mpFp_init(sN->secret_key, _secp265k1->n);
+    mpFp_init(sN->secret_key, _sscheme->cvp->n);
     status = _asn1_read_mpz_from_octet_string(tmpz, sN_asn1, "secret_key");
     if (status != 0) {
         mpz_clear(tmpz);
         goto error_cleanup2;
     }
-    mpFp_set_mpz(sN->secret_key, tmpz, _secp265k1->n);
+    mpFp_set_mpz(sN->secret_key, tmpz, _sscheme->cvp->n);
     mpz_clear(tmpz);
 
     status = _asn1_read_int64_from_integer(&(sN->not_valid_before), sN_asn1, "not_before");
@@ -225,11 +242,11 @@ error_cleanup3:
 }
 
 void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN) {
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
+    if (_sscheme == NULL) _sscheme_init();
     pN->not_valid_before = sN->not_valid_before;
     pN->not_valid_after = sN->not_valid_after;
-    mpECP_init(pN->public_key, _secp265k1);
-    mpECP_scalar_base_mul(pN->public_key, _secp265k1_base, sN->secret_key);
+    mpECP_init(pN->public_key, _sscheme->cvp);
+    mpECP_scalar_base_mul(pN->public_key, _sscheme->cv_G, sN->secret_key);
     return;
 }
 
@@ -314,7 +331,7 @@ int ctNAKPublicKey_init_import_DER(ctNAKPublicKey pN, unsigned char *der, size_t
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
     int status;
 
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
+    if (_sscheme == NULL) _sscheme_init();
 
     status = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
     if (status != 0) return -1;
@@ -351,14 +368,14 @@ int ctNAKPublicKey_init_import_DER(ctNAKPublicKey pN, unsigned char *der, size_t
         unsigned char *buffer;
         size_t sz;
 
-        mpECP_init(pN->public_key, _secp265k1);
+        mpECP_init(pN->public_key, _sscheme->cvp);
         buffer = _asn1_read_octet_string_as_uchar(pN_asn1, "public_key", &sz);
         if (status != 0) {
             memset(buffer,0,sz);
             free(buffer);
             goto error_cleanup2;
         }
-        mpECP_set_bytes(pN->public_key, buffer, sz, _secp265k1);
+        mpECP_set_bytes(pN->public_key, buffer, sz, _sscheme->cvp);
         memset(buffer,0,sz);
         free(buffer);
     }
@@ -388,215 +405,27 @@ error_cleanup3:
 }
 
 // ECDSA Signatures
-int ctNAKSignature_init_Sign(ctNAKSignature sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz) {
-    unsigned char hash[crypto_hash_sha256_BYTES];
-    mpFp_t k_n;
-    mpFp_t r_n;
-    mpFp_t s_n;
-    mpFp_t e_n;
-    mpz_t e;
-    mpz_t r;
-    mpECP_t R;
-    int status;
-
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
-
-    if (sz == 0) return -1;
-
-    mpFp_init(k_n, _secp265k1->n);
-    mpFp_init(r_n, _secp265k1->n);
-    mpFp_init(s_n, _secp265k1->n);
-    mpFp_init(e_n, _secp265k1->n);
-    mpz_init(r);
-    mpz_init(e);
-    mpECP_init(R, _secp265k1);
-
-    crypto_hash_sha256(hash, msg, sz);
-    mpz_import (e, crypto_hash_sha256_BYTES, 1, 1, 1, 0, hash);
-    mpFp_set_mpz(e_n, e, _secp265k1->n);
-new_random:
-    mpFp_urandom(k_n, _secp265k1->n);
-    if (__GMP_UNLIKELY(mpFp_cmp_ui(k_n, 0) == 0)) goto new_random;
-
-    mpECP_scalar_base_mul(R, _secp265k1_base, k_n);
-    mpz_set_mpECP_affine_x(r, R);
-    if (__GMP_UNLIKELY(mpz_cmp_ui(r, 0) == 0)) goto new_random;
-
-    mpFp_set_mpz(r_n, r, _secp265k1->n);
-    mpFp_mul(s_n, r_n, sN->secret_key);
-    mpFp_add(s_n, s_n, e_n);
-    status = mpFp_inv(e_n, k_n);
-    if (status != 0) goto new_random;
-    mpFp_mul(s_n, s_n, e_n);
-    if (__GMP_UNLIKELY(mpFp_cmp_ui(s_n, 0) == 0)) goto new_random;
-
-    mpFp_init(sig->r, _secp265k1->n);
-    mpFp_init(sig->s, _secp265k1->n);
-
-    mpFp_set(sig->r, r_n);
-    mpFp_set(sig->s, s_n);
-
-    mpECP_clear(R);
-    mpz_clear(e);
-    mpz_clear(r);
-    mpFp_clear(e_n);
-    mpFp_clear(s_n);
-    mpFp_clear(r_n);
-    mpFp_clear(k_n);
-    return 0;
+int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz) {
+    if (_sscheme == NULL) _sscheme_init();
+    return mpECDSASignature_init_Sign(sig, _sscheme, sN->secret_key, msg, sz);
 }
 
-int ctNAKSignature_verify_cmp(ctNAKSignature sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz) {
-    unsigned char hash[crypto_hash_sha256_BYTES];
-    mpFp_t w;
-    mpFp_t u1;
-    mpFp_t u2;
-    mpFp_t e_n;
-    mpFp_t p_n;
-    mpz_t e;
-    mpECP_t P;
-    mpECP_t Pq;
-    int status;
-
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
-
-    if (sz == 0) return -1;
-
-    // validate signature input, presume public key was validated at import
-    if ((mpz_cmp(sig->r->fp->p, _secp265k1->n) != 0) || 
-        (mpz_cmp(sig->s->fp->p, _secp265k1->n) != 0)) {
-        return -1;
-    }
-
-    if ((mpFp_cmp_ui(sig->r, 0) == 0) || (mpFp_cmp_ui(sig->s, 0) == 0)) {
-        return -1;
-    }
-
-    mpz_init(e);
-    mpFp_init_fp(p_n, _secp265k1->fp);
-    mpFp_init(e_n, _secp265k1->n);
-    mpFp_init(w, _secp265k1->n);
-    mpFp_init(u1, _secp265k1->n);
-    mpFp_init(u2, _secp265k1->n);
-    mpECP_init(P, _secp265k1);
-    mpECP_init(Pq, _secp265k1);
-
-    crypto_hash_sha256(hash, msg, sz);
-    mpz_import (e, crypto_hash_sha256_BYTES, 1, 1, 1, 0, hash);
-    mpFp_set_mpz(e_n, e, _secp265k1->n);
-    mpFp_inv(w, sig->s);
-    mpFp_mul(u1, e_n, w);
-    mpFp_mul(u2, sig->r, w);
-    mpECP_scalar_base_mul(P, _secp265k1_base, u1);
-    mpECP_scalar_mul(Pq, pN->public_key, u2);
-    mpECP_add(P, P, Pq);
-    mpz_set_mpECP_affine_x(e, P);
-    mpFp_set_mpz(p_n, e, _secp265k1->n);
-
-    status = mpFp_cmp(p_n, sig->r);
-
-    mpECP_clear(Pq);
-    mpECP_clear(P);
-    mpFp_clear(u2);
-    mpFp_clear(u1);
-    mpFp_clear(w);
-    mpFp_clear(e_n);
-    mpFp_clear(p_n);
-    mpz_clear(e);
-
-    return status;
+int ctNAKSignature_verify_cmp(mpECDSASignature_t sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz) {
+    return mpECDSASignature_verify_cmp(sig, pN->public_key, msg, sz);
 }
 
-static void _shift_right_and_zero_pad(unsigned char *buffer, size_t len, size_t shift) {
-    int i;
+unsigned char *ctNAKSignature_export_bytes(mpECDSASignature_t sig, size_t *sz) {
+    return mpECDSASignature_export_bytes(sig, sz);
+}
 
-    for (i = len-1; i >= shift; i--) {
-        buffer[i] = buffer[i-shift];
-    }
-    for (i = shift - 1; i >= 0; i--) {
-        buffer[i] = 0;
-    }
+int ctNAKSignature_init_import_bytes(mpECDSASignature_t sig, unsigned char *bsig, size_t sz) {
+    if (_sscheme == NULL) _sscheme_init();
+    return mpECDSASignature_init_import_bytes(sig, _sscheme, bsig, sz);
+}
+
+void ctNAKSignature_clear(mpECDSASignature_t sig) {
+    mpECDSASignature_clear(sig);
     return;
-}
-
-unsigned char *ctNAKSignature_export_bytes(ctNAKSignature sig, size_t *sz) {
-    mpz_t r;
-    mpz_t s;
-    unsigned char *buffer;
-    unsigned char *br;
-    unsigned char *bs;
-    size_t bsz;
-
-    mpz_init(r);
-    mpz_init(s);
-
-    if (_secp265k1 == NULL) _secp265k1_curve_init();
-
-    buffer = (unsigned char *)malloc((_SECP256_N_BYTES << 1) * sizeof(char));
-    br = buffer;
-    bs = buffer + _SECP256_N_BYTES;
-    assert(buffer != NULL);
-
-    mpz_set_mpFp(r, sig->r);
-    mpz_set_mpFp(s, sig->s);
-
-    mpz_export(br, &bsz, 1, sizeof(char), 0, 0, r);
-    assert(bsz <= _SECP256_N_BYTES);
-    if (bsz < _SECP256_N_BYTES) {
-        _shift_right_and_zero_pad(br, _SECP256_N_BYTES, _SECP256_N_BYTES - bsz);
-    }
-
-    mpz_export(bs, &bsz, 1, sizeof(char), 0, 0, s);
-    assert(bsz <= _SECP256_N_BYTES);
-    if (bsz < _SECP256_N_BYTES) {
-        _shift_right_and_zero_pad(bs, _SECP256_N_BYTES, _SECP256_N_BYTES - bsz);
-    }
-
-    mpz_clear(s);
-    mpz_clear(r);
-
-    *sz = (_SECP256_N_BYTES << 1);
-    return buffer;
-}
-
-int ctNAKSignature_init_import_bytes(ctNAKSignature sig, unsigned char *bsig, size_t sz) {
-    mpz_t r;
-    mpz_t s;
-    unsigned char *br;
-    unsigned char *bs;
-
-    if (sz != (_SECP256_N_BYTES << 1)) {
-        return -1;
-    }
-
-    br = bsig;
-    bs = bsig + _SECP256_N_BYTES;
-
-    mpz_init(r);
-    mpz_init(s);
-
-    mpz_import (r, _SECP256_N_BYTES, 1, sizeof(char), 0, 0, br);
-    mpz_import (s, _SECP256_N_BYTES, 1, sizeof(char), 0, 0, bs);
-
-    if ((mpz_cmp_ui(r, 0) <= 0) || (mpz_cmp_ui(s, 0) <= 0) ||
-        (mpz_cmp(r, _secp265k1->n) >= 0) || (mpz_cmp(s, _secp265k1->n) >= 0)) {
-        mpz_clear(s);
-        mpz_clear(r);
-        return -1;
-    }
-
-    mpFp_init(sig->r, _secp265k1->n);
-    mpFp_set_mpz(sig->r, r, _secp265k1->n);
-    mpFp_init(sig->s, _secp265k1->n);
-    mpFp_set_mpz(sig->s, s, _secp265k1->n);
-    mpz_clear(s);
-    mpz_clear(r);
-    return 0;
-}
-
-void ctNAKSignature_clear(ctNAKSignature sig) {
-    mpFp_clear(sig->r);
-    mpFp_clear(sig->s);
 }
 
 // signed PUBLIC Key (as present in blockchain xactions)
