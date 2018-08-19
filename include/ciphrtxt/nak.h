@@ -42,6 +42,7 @@ extern "C" {
 
 typedef struct {
     mpFp_t  secret_key;
+    mpFp_t  secret_key_inv;
     utime_t not_valid_before;
     utime_t not_valid_after;
 } _ctNAKSecretKey;
@@ -81,6 +82,42 @@ void ctNAKSignature_clear(mpECDSASignature_t sig);
 unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
 int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
 int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
+
+// anonymous authentication methods (based on model proposed by Daniel Slamanig
+// in Anonymous Authentication from Public-Key Encryption Revisited)
+
+// The challenge is a list of encryptions with their associated public key
+// points and a single public key used for response
+
+typedef struct {
+    int n;
+    mpECElgamalCiphertext_t *ctxt;
+    mpECP_t *pK;
+    mpECP_t session_pK;
+    utime_t session_expire;
+} _ctNAKAuthChallenge;
+
+typedef _ctNAKAuthChallenge ctNAKAuthChallenge_t[1];
+typedef _ctNAKAuthChallenge *ctNAKAuthChallenge_ptr;
+
+int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt);
+unsigned char *ctNAKAuthChallenge_export_DER(ctNAKAuthChallenge_t c, size_t *sz);
+int ctNAKAuthChallenge_import_DER(ctNAKAuthChallenge_t c, unsigned char *der, size_t sz);
+void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c);
+
+typedef struct {
+    mpECP_t session_pK;
+    mpECElgamalCiphertext_t ctxt;
+} _ctNAKAuthResponse;
+
+typedef _ctNAKAuthResponse ctNAKAuthResponse_t[1];
+typedef _ctNAKAuthResponse *ctNAKAuthResponse_ptr;
+
+int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey sN);
+int ctNAKAuthResponse_validate_cmp(ctNAKAuthResponse_t r, mpFp_t session_sK, mpECP_t ptxt);
+unsigned char *ctNAKAuthResponse_export_DER(ctNAKAuthResponse_t r, size_t *sz);
+int ctNAKAuthResponse_import_DER(ctNAKAuthResponse_t, unsigned char *der, size_t sz);
+void ctNAKAuthResponse_clear(ctNAKAuthResponse_t r);
 
 #ifdef __cplusplus
 }

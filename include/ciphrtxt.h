@@ -33,5 +33,8 @@
 
 #include <ciphrtxt/keys.h>
 #include <ciphrtxt/message.h>
+#include <ciphrtxt/nak.h>
+#include <ciphrtxt/postage.h>
+#include <ciphrtxt/utime.h>
 
 #endif // _CIPHRTXT_H_INCLUDED_

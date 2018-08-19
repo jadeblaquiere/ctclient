@@ -32,6 +32,7 @@
 #include <ciphrtxt/nak.h>
 #include <ciphrtxt/utime.h>
 #include <ecc.h>
+#include <fspke/cwhash.h>
 #include <gmp.h>
 #include <inttypes.h>
 #include <libtasn1.h>
@@ -39,15 +40,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-static mpECurve_ptr _secp256k1 = NULL;
-static mpECDSAHashfunc_ptr _sha256 = NULL;
+static mpECurve_ptr _curve = NULL;
+static mpECP_ptr _G = NULL;
+static mpECDSAHashfunc_ptr _hash = NULL;
 static mpECDSASignatureScheme_ptr _sscheme = NULL;
+static cwHash_ptr _aa_cwhash = NULL;
+
+static char *_curvename = "secp256k1";
+#define _CURVE_N_BYTES    (32U)
+
+// constants for carter-wegman universal hash
+// p = 2**414 - 17;
+// q = order of secp256k1
+// a = int(SHA512.new("Satoshi".encode()).hexdigest(),16) % p
+// b = int(SHA512.new("Nakamoto".encode()).hexdigest(),16) % p
+static char *_aa_cw_phex = "0x3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF";
+static char *_aa_cw_qhex = "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
+static char *_aa_cw_ahex = "0x0B482D32C46A556562FE79AD8402820D52EB7D562463C021F23E33D6274E60845C19D6DC2989108474B45576E2B4F527BF9BCFBD";
+static char *_aa_cw_bhex = "0x2CE9197AC7E9C5F81479E5C311F24362A4BFBE6C6BE45BF95031A5370762B69D6F915DE001ED04F5C6D6144F16074D0291D9623F";
 
 extern const asn1_static_node ciphrtxt_asn1_tab[];
 
-#define _SECP256_N_BYTES    (32U)
 
-static void _wrap_libsodium_sha256(unsigned char *hash, unsigned char *msg, size_t sz) {
+static void _wrap_libsodium_hash(unsigned char *hash, unsigned char *msg, size_t sz) {
     int status;
     status = crypto_hash_sha256(hash, msg, (unsigned long long)sz);
     assert(status == 0);
@@ -59,31 +74,63 @@ static void _sscheme_clear(void) {
     mpECDSASignatureScheme_clear(_sscheme);
     free(_sscheme);
     _sscheme = NULL;
-    mpECDSAHashfunc_clear(_sha256);
-    free(_sha256);
-    _sha256 = NULL;
-    mpECurve_clear(_secp256k1);
-    free(_secp256k1);
-    _secp256k1 = NULL;
+    mpECDSAHashfunc_clear(_hash);
+    free(_hash);
+    _hash = NULL;
+    mpECP_clear(_G);
+    free(_G);
+    _G = NULL;
+    mpECurve_clear(_curve);
+    free(_curve);
+    _curve = NULL;
+    cwHash_clear(_aa_cwhash);
+    free(_aa_cwhash);
+    _aa_cwhash = NULL;
     return;
 }
 
 static void _sscheme_init(void) {
     int status;
 
-    _secp256k1 = (mpECurve_ptr)malloc(sizeof(mpECurve_t));
-    assert(_secp256k1 != NULL);
-    mpECurve_init(_secp256k1);
-    status = mpECurve_set_named(_secp256k1, "secp256k1");
+    _curve = (mpECurve_ptr)malloc(sizeof(mpECurve_t));
+    assert(_curve != NULL);
+    mpECurve_init(_curve);
+    status = mpECurve_set_named(_curve, _curvename);
     assert(status == 0);
-    _sha256 = (mpECDSAHashfunc_ptr)malloc(sizeof(mpECDSAHashfunc_t));
-    assert(_sha256 != NULL);
-    mpECDSAHashfunc_init(_sha256);
-    _sha256->dohash = _wrap_libsodium_sha256;
-    _sha256->hsz = crypto_hash_sha256_BYTES;
+    _G = (mpECP_ptr)malloc(sizeof(mpECP_t));
+    assert(_G != NULL);
+    mpECP_init(_G, _curve);
+    mpECP_set_mpz(_G, _curve->G[0], _curve->G[1], _curve);
+    mpECP_scalar_base_mul_setup(_G);
+    _hash = (mpECDSAHashfunc_ptr)malloc(sizeof(mpECDSAHashfunc_t));
+    assert(_hash != NULL);
+    mpECDSAHashfunc_init(_hash);
+    _hash->dohash = _wrap_libsodium_hash;
+    _hash->hsz = crypto_hash_sha256_BYTES;
     _sscheme = (mpECDSASignatureScheme_ptr)malloc(sizeof(mpECDSASignatureScheme_t));
     assert(_sscheme != NULL);
-    mpECDSASignatureScheme_init(_sscheme, _secp256k1, _sha256);
+    mpECDSASignatureScheme_init(_sscheme, _curve, _hash);
+    _aa_cwhash = (cwHash_ptr)malloc(sizeof(cwHash_t));
+    assert(_aa_cwhash != NULL);
+    {
+        mpz_t a, b, p, q;
+        mpz_init(a);
+        mpz_init(b);
+        mpz_init(p);
+        mpz_init(q);
+
+        mpz_set_str(a, _aa_cw_ahex, 0);
+        mpz_set_str(b, _aa_cw_bhex, 0);
+        mpz_set_str(p, _aa_cw_phex, 0);
+        mpz_set_str(q, _aa_cw_qhex, 0);
+        cwHash_init(_aa_cwhash, p);
+        cwHash_set_mpz(_aa_cwhash, q, p, a, b);
+        mpz_clear(q);
+        mpz_clear(p);
+        mpz_clear(b);
+        mpz_clear(a);
+    }
+
     atexit(&_sscheme_clear);
     return;
 }
@@ -95,6 +142,8 @@ void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva) {
     sN->not_valid_after = nva;
     mpFp_init(sN->secret_key, _sscheme->cvp->n);
     mpFp_urandom(sN->secret_key, _sscheme->cvp->n);
+    mpFp_init(sN->secret_key_inv, _sscheme->cvp->n);
+    mpFp_inv(sN->secret_key_inv, sN->secret_key);
     return;
 }
 
@@ -102,6 +151,7 @@ void ctNAKSecretKey_clear(ctNAKSecretKey sN) {
     sN->not_valid_before = 0;
     sN->not_valid_after = 0;
     mpFp_clear(sN->secret_key);
+    mpFp_clear(sN->secret_key_inv);
     return;
 }
 
@@ -215,6 +265,8 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t
         goto error_cleanup2;
     }
     mpFp_set_mpz(sN->secret_key, tmpz, _sscheme->cvp->n);
+    mpFp_init(sN->secret_key_inv, _sscheme->cvp->n);
+    mpFp_inv(sN->secret_key_inv, sN->secret_key);
     mpz_clear(tmpz);
 
     status = _asn1_read_int64_from_integer(&(sN->not_valid_before), sN_asn1, "not_before");
@@ -228,6 +280,7 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t
     return 0;
 
 error_cleanup2:
+    mpFp_clear(sN->secret_key_inv);
     mpFp_clear(sN->secret_key);
     sN->not_valid_before = 0;
     sN->not_valid_after = 0;
@@ -432,3 +485,240 @@ void ctNAKSignature_clear(mpECDSASignature_t sig) {
 //unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
 //int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
 //int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
+
+// Slamanig's Anonymous Authentication method requires deterministic encryption
+// but can leverage probablistic encryption models using a subtitution for
+// the random value. The method used is based on the model proposed and
+// analyzed in "Deterministic and Efficiently Searchable Encryption" (Bellare,
+// Boldyreva, O'Neill 2006), which uses a hash function H(pk || ptxt) in place
+// of the random value k, assuming ptxt is itself a random value this method
+// is only negligibly less secure than using a pure random k
+
+// 1 + 32 + 32 to include the format tag (0x04) and x,y coordinates
+#define secp256k1_uncompressed_BYTES    (65U)
+
+int _mpECElgamal_init_encrypt_deterministic(mpECElgamalCiphertext_t ctxt, mpECP_t pK, mpECP_t ptxt) {
+    mpFp_t k;
+
+    if (_sscheme == NULL) _sscheme_init();
+    if (mpECurve_cmp(pK->cvp, ptxt->cvp) != 0) {
+        return -1;
+    }
+    mpFp_init(k, pK->cvp->n);
+
+    // for uniform hashing, H() = CWHash(SHA512(pKx || pKy || pTx || pTy))
+    {
+        unsigned char shash[crypto_hash_sha512_BYTES];
+        unsigned char pKpT[(secp256k1_uncompressed_BYTES * 2)];
+        mpz_t t;
+        int status;
+
+        assert(mpECP_out_bytelen(pK, 0) == secp256k1_uncompressed_BYTES);
+        mpECP_out_bytes(pKpT, pK, 0);
+        mpECP_out_bytes(pKpT + secp256k1_uncompressed_BYTES, pK, 0);
+        status = crypto_hash_sha512(shash, pKpT, secp256k1_uncompressed_BYTES * 2);
+        assert(status == 0);
+        mpz_init(t);
+        mpz_import(t, crypto_hash_sha512_BYTES, 1, 1, 1, 0, shash);
+        cwHash_hashval(t, _aa_cwhash, t);
+        mpFp_set_mpz(k, t, pK->cvp->n);
+        mpz_clear(t);
+    }
+    if (mpFp_cmp_ui(k, 0) == 0) {
+        mpFp_clear(k);
+        return -1;
+    }
+
+    mpECP_init(ctxt->C, pK->cvp);
+    mpECP_init(ctxt->D, pK->cvp);
+    mpECP_set_mpz(ctxt->C, pK->cvp->G[0], pK->cvp->G[1], pK->cvp);
+    mpECP_scalar_mul(ctxt->C, ctxt->C, k);
+
+    mpECP_scalar_mul(ctxt->D, pK, k);
+    mpECP_add(ctxt->D, ctxt->D, ptxt);
+
+    mpFp_clear(k);
+    return 0;
+}
+
+//typedef struct {
+//    int n;
+//    mpECElgamalCiphertext_t *ctxt;
+//    mpECP_t *pK;
+//    mpECP_t session_pK;
+//    utime_t session_expire;
+//} _ctNAKAuthChallenge;
+
+int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt) {
+    int i;
+
+    if (_sscheme == NULL) _sscheme_init();
+
+    // validate input
+    if (mpECurve_cmp(session_pK->cvp, _curve) != 0) {
+        return -1;
+    }
+    // validate curve of pK[i], ensure session_pK not in set
+    for (i = 0; i < n; i++) {
+        if ((mpECurve_cmp(pN[i]->public_key->cvp, session_pK->cvp) != 0) || 
+            (mpECP_cmp(pN[i]->public_key, session_pK) == 0)) {
+            return -1;
+        }
+    }
+    c->ctxt = (mpECElgamalCiphertext_t *)malloc(n * sizeof(mpECElgamalCiphertext_t));
+    assert(c->ctxt != NULL);
+    c->pK = (mpECP_t *)malloc(n * sizeof(mpECP_t));
+    assert(c->ctxt != NULL);
+
+    // encrypt random value r with each pK
+    for (i = 0; i < n; i++) {
+        int status;
+
+        mpECP_init(c->pK[i], _curve);
+        mpECP_set(c->pK[i], pN[i]->public_key);
+        status = _mpECElgamal_init_encrypt_deterministic(c->ctxt[i], c->pK[i], ptxt);
+        if (status != 0) {
+            mpECP_clear(c->pK[i]);
+            i--;
+            while (i >= 0) {
+                mpECElgamal_clear(c->ctxt[i]);
+                mpECP_clear(c->pK[i]);
+                i--;
+            }
+            free(c->pK);
+            free(c->ctxt);
+            return -1;
+        }
+    }
+    mpECP_init(c->session_pK, _curve);
+    mpECP_set(c->session_pK, session_pK);
+    c->n = n;
+    c->session_expire = expire;
+
+    return 0;
+}
+
+void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c) {
+    int i;
+
+    mpECP_clear(c->session_pK);
+    for (i = 0; i < c->n; i++) {
+        mpECP_clear(c->pK[i]);
+        mpECElgamal_clear(c->ctxt[i]);
+    }
+    free(c->pK);
+    free(c->ctxt);
+    mpECP_clear(c->session_pK);
+    c->session_expire = 0;
+    c->n = 0;
+    return;
+}
+
+int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey sN) {
+    ctNAKPublicKey pN;
+    int i;
+
+    if (_sscheme == NULL) _sscheme_init();
+
+    // validate input challenge, all on the same curve, session key not in set
+    if (mpECurve_cmp(c->session_pK->cvp, _curve) != 0) {
+        return -1;
+    }
+    for (i = 0; i < c->n; i++) {
+        if (mpECurve_cmp(c->pK[i]->cvp, _curve) != 0) {
+            return -1;
+        }
+        if (mpECP_cmp(c->pK[i], c->session_pK) == 0) {
+            return -1;
+        }
+        if (mpECurve_cmp(c->ctxt[i]->C->cvp, _curve) != 0) {
+            return -1;
+        }
+        if (mpECurve_cmp(c->ctxt[i]->D->cvp, _curve) != 0) {
+            return -1;
+        }
+    }
+
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
+    
+    for (i = 0; i < c->n; i++) {
+        if (mpECP_cmp(c->pK[i], pN->public_key) == 0) {
+            mpECP_t rpt;
+            int status;
+            int j;
+            
+            status = mpECElgamal_init_decrypt(rpt, sN->secret_key, c->ctxt[i]);
+            if (status != 0) goto cleanup1;
+
+            // validate that the server hasn't tried to compromise privacy
+            for (j = 0; j < c->n; j++) {
+                mpECElgamalCiphertext_t ct;
+
+                if (j == i) continue;
+                status = _mpECElgamal_init_encrypt_deterministic(ct, c->pK[j], rpt);
+                if ((mpECP_cmp(ct->C, c->ctxt[j]->C) != 0) ||
+                    (mpECP_cmp(ct->D, c->ctxt[j]->D) != 0)) {
+                    mpECP_clear(rpt);
+                    mpECElgamal_clear(ct);
+                    ctNAKPublicKey_clear(pN);
+                    return -1;
+                }
+                mpECElgamal_clear(ct);
+            }
+            ctNAKPublicKey_clear(pN);
+            // copy session key from challenge
+            mpECP_init(r->session_pK, c->session_pK->cvp);
+            mpECP_set(r->session_pK, c->session_pK);
+            // encrypt secret (r) for session key
+            status = mpECElgamal_init_encrypt(r->ctxt, c->session_pK, rpt);
+            mpECP_clear(rpt);
+            if (status != 0) {
+                mpECP_clear(r->session_pK);
+                return -1;
+            }
+            return 0;
+        }
+    }
+
+cleanup1:
+    ctNAKPublicKey_clear(pN);
+    return -1;
+}
+
+
+int ctNAKAuthResponse_validate_cmp(ctNAKAuthResponse_t r, mpFp_t session_sK, mpECP_t ptxt) {
+    //mpECurve_ptr cvp;
+    mpECP_t pchk;
+    //mpECP_t session_pK;
+    int status;
+    
+    if (_sscheme == NULL) _sscheme_init();
+
+    // validate input
+    mpECP_init(pchk, _curve);
+    mpECP_scalar_base_mul(pchk, _G, session_sK);
+    if (mpECP_cmp(pchk, r->session_pK) != 0) {
+        mpECP_clear(pchk);
+        return -1;
+    }
+    mpECP_clear(pchk);
+    if ((mpECurve_cmp(r->ctxt->C->cvp, _curve) != 0) ||
+        (mpECurve_cmp(r->ctxt->D->cvp, _curve) != 0)) {
+        return -1;
+    }
+
+    status = mpECElgamal_init_decrypt(pchk, session_sK, r->ctxt);
+    if (status != 0) {
+        return -1;
+    }
+    status = mpECP_cmp(pchk, ptxt);
+    mpECP_clear(pchk);
+
+    return status;
+}
+
+void ctNAKAuthResponse_clear(ctNAKAuthResponse_t r) {
+    mpECP_clear(r->session_pK);
+    mpECElgamal_clear(r->ctxt);
+    return;
+}

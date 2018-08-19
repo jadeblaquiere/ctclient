@@ -128,6 +128,7 @@ START_TEST(test_export_import)
     memset(der, 0, sz);
     free(der);
 
+    
     ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
     der = ctNAKPublicKey_export_DER(pN, &sz);
     assert(der != NULL);
@@ -153,6 +154,80 @@ START_TEST(test_export_import)
     ctNAKSecretKey_clear(sNcp);
 END_TEST
 
+START_TEST(test_auth_challenge)
+    ctNAKSecretKey sN;
+    ctNAKPublicKey pN;
+    ctNAKAuthChallenge_t ch;
+    ctNAKAuthResponse_t rs;
+    mpECurve_ptr cvp;
+    mpFp_t session_sK;
+    mpECP_t Gpt;
+    mpECP_t session_pK;
+    mpECP_t r_ptxt;
+    utime_t not_valid_before;
+    utime_t not_valid_after;
+    utime_t session_expire;
+    ctNAKSecretKey *c_sN;
+    ctNAKPublicKey *c_pN;
+    int n = 50;
+    int i;
+    int status;
+
+    not_valid_before = getutime();
+    not_valid_after = not_valid_before + (52 * UTIME_WEEKS);
+
+    ctNAKSecretKey_init_Gen(sN, not_valid_before, not_valid_after);
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
+
+    cvp = pN->public_key->cvp;
+
+    mpFp_init(session_sK, cvp->n);
+    mpFp_urandom(session_sK, cvp->n);
+    mpECP_init(Gpt, cvp);
+    mpECP_set_mpz(Gpt, cvp->G[0], cvp->G[1], cvp);
+    mpECP_init(session_pK, cvp);
+    mpECP_scalar_mul(session_pK, Gpt, session_sK);
+
+    c_sN = (ctNAKSecretKey *)malloc(n * sizeof(ctNAKSecretKey));
+    c_pN = (ctNAKPublicKey *)malloc(n * sizeof(ctNAKPublicKey));
+
+    for (i = 0; i < n; i++) {
+        ctNAKSecretKey_init_Gen(c_sN[i], not_valid_before, not_valid_after);
+        ctNAKPublicKey_init_ctNAKSecretKey(c_pN[i], c_sN[i]);
+    }
+
+    session_expire = getutime() + (1 * UTIME_HOURS);
+
+    mpECP_init(r_ptxt, cvp);
+    mpECP_urandom(r_ptxt, cvp);
+
+    status = ctNAKAuthChallenge_init(ch, n, c_pN, session_pK, session_expire, r_ptxt);
+    assert(status == 0);
+
+    for (i = 0; i < n; i++) {
+        status = ctNAKAuthResponse_init(rs, ch, c_sN[i]);
+        assert(status == 0);
+
+        status = ctNAKAuthResponse_validate_cmp(rs, session_sK, r_ptxt);
+        assert(status == 0);
+
+        ctNAKAuthResponse_clear(rs);
+    }
+    
+    ctNAKAuthChallenge_clear(ch);
+    for (i = 0; i < n; i++) {
+        ctNAKPublicKey_clear(c_pN[i]);
+        ctNAKSecretKey_clear(c_sN[i]);
+    }
+    free(c_pN);
+    free(c_sN);
+    mpECP_clear(session_pK);
+    mpECP_clear(Gpt);
+    mpFp_clear(session_sK);
+    ctNAKPublicKey_clear(pN);
+    ctNAKSecretKey_clear(sN);
+END_TEST
+
 static Suite *mpCT_test_suite(void) {
     Suite *s;
     TCase *tc;
@@ -163,6 +238,7 @@ static Suite *mpCT_test_suite(void) {
     tcase_add_test(tc, test_init_clear);
     tcase_add_test(tc, test_sign_verify);
     tcase_add_test(tc, test_export_import);
+    tcase_add_test(tc, test_auth_challenge);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);
