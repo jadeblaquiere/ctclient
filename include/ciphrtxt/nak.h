@@ -79,9 +79,9 @@ int ctNAKSignature_init_import_bytes(mpECDSASignature_t sig, unsigned char *bsig
 void ctNAKSignature_clear(mpECDSASignature_t sig);
 
 // signed PUBLIC Key (as present in blockchain xactions)
-unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
-int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
-int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
+//unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
+//int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
+//int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
 
 // anonymous authentication methods (based on model proposed by Daniel Slamanig
 // in Anonymous Authentication from Public-Key Encryption Revisited)
@@ -116,7 +116,7 @@ typedef _ctNAKAuthResponse *ctNAKAuthResponse_ptr;
 int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey sN);
 int ctNAKAuthResponse_validate_cmp(ctNAKAuthResponse_t r, mpFp_t session_sK, mpECP_t ptxt);
 unsigned char *ctNAKAuthResponse_export_DER(ctNAKAuthResponse_t r, size_t *sz);
-int ctNAKAuthResponse_import_DER(ctNAKAuthResponse_t, unsigned char *der, size_t sz);
+int ctNAKAuthResponse_init_import_DER(ctNAKAuthResponse_t, unsigned char *der, size_t sz);
 void ctNAKAuthResponse_clear(ctNAKAuthResponse_t r);
 
 #ifdef __cplusplus

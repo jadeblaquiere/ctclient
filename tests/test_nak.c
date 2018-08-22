@@ -232,8 +232,31 @@ START_TEST(test_auth_challenge)
     ctNAKAuthChallenge_clear(ch_cp);
 
     for (i = 0; i < n; i++) {
+        ctNAKAuthResponse_t rs_cp;
+
         status = ctNAKAuthResponse_init(rs, ch, c_sN[i]);
         assert(status == 0);
+        
+        buffer = ctNAKAuthResponse_export_DER(rs, &bsz);
+        assert(buffer != NULL);
+
+        if (i == 0) {
+            printf("response der (%zd bytes) = ", bsz);
+            for (i =  0; i < bsz; i++) {
+                printf("%02X", buffer[i]);
+            }
+            printf("\n");
+        }
+
+        status = ctNAKAuthResponse_init_import_DER(rs_cp, buffer, bsz);
+        assert(status == 0);
+        
+        assert(mpECP_cmp(rs->session_pK, rs_cp->session_pK) == 0);
+        assert(mpECP_cmp(rs->ctxt->C, rs_cp->ctxt->C) == 0);
+        assert(mpECP_cmp(rs->ctxt->D, rs_cp->ctxt->D) == 0);
+
+        free(buffer);
+        ctNAKAuthResponse_clear(rs_cp);
 
         status = ctNAKAuthResponse_validate_cmp(rs, session_sK, r_ptxt);
         assert(status == 0);

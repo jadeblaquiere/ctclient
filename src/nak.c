@@ -736,6 +736,7 @@ int ctNAKAuthChallenge_init_import_DER(ctNAKAuthChallenge_t c, unsigned char *de
     if ((buffer == NULL) || (sz != bsz)) goto error_cleanup3;
     mpECP_init(c->session_pK, _curve);
     result = mpECP_set_bytes(c->session_pK, buffer, sz, _curve);
+    if (result != 0) goto error_cleanup2;
     memset((void *)buffer, 0, sz);
     free(buffer);
 
@@ -934,6 +935,152 @@ int ctNAKAuthResponse_validate_cmp(ctNAKAuthResponse_t r, mpFp_t session_sK, mpE
     mpECP_clear(pchk);
 
     return status;
+}
+
+unsigned char *ctNAKAuthResponse_export_DER(ctNAKAuthResponse_t r, size_t *sz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE nar_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    size_t bsz;
+    int result;
+    size_t length;
+    int sum;
+
+    sum = 0;
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return NULL;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTNAKAuthResponse",
+        &nar_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, nar_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    bsz = mpECP_out_bytelen(r->session_pK, 1);
+    buffer = (unsigned char *)malloc(bsz*sizeof(char));
+
+    sum += _asn1_write_int64_as_integer(nar_asn1, "version", 1);
+    mpECP_out_bytes(buffer, r->session_pK, 1);
+    sum += _asn1_write_uchar_string_as_octet_string(nar_asn1, "session_pk", buffer, bsz);
+    mpECP_out_bytes(buffer, r->ctxt->C, 1);
+    sum += _asn1_write_uchar_string_as_octet_string(nar_asn1, "ctxt.c", buffer, bsz);
+    mpECP_out_bytes(buffer, r->ctxt->D, 1);
+    sum += _asn1_write_uchar_string_as_octet_string(nar_asn1, "ctxt.d", buffer, bsz);
+    free(buffer);
+
+    sum += 256;  // pad for DER header + some extra just in case
+    length = sum;
+    buffer = (unsigned char *)malloc((sum) * sizeof(char));
+    assert(buffer != NULL);
+    {
+        int isz = length;
+        result = asn1_der_coding(nar_asn1, "", (char *)buffer, &isz, asnError);
+        length = isz;
+    }
+    if (result != 0) {
+        asn1_delete_structure(&nar_asn1);
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+    assert(length < sum);
+
+    asn1_delete_structure(&nar_asn1);
+    asn1_delete_structure(&ct_asn1);
+    *sz = length;
+    return buffer;
+}
+
+int ctNAKAuthResponse_init_import_DER(ctNAKAuthResponse_t r, unsigned char *der, size_t dsz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE nar_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    size_t  bsz;
+    size_t  sz;
+    int result;
+
+    if (_sscheme == NULL) _sscheme_init();
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return -1;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTNAKAuthResponse",
+        &nar_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return -1;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, nar_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // read DER into ASN1 structure
+    result = asn1_der_decoding(&nar_asn1, (char *)der, (int)dsz, asnError);
+    if (result != ASN1_SUCCESS) return -1;
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, nar_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    {
+        int64_t ver;
+        result = _asn1_read_int64_from_integer(&ver, nar_asn1, "version");
+        // version 1 is only known version at this time
+        if ((result != 0) || (ver != 1)) goto error_cleanup3;
+    }
+
+    bsz = mpECP_out_bytelen(_G, 1);
+
+    // Read secret key from ASN1 structure
+    buffer = _asn1_read_octet_string_as_uchar(nar_asn1, "session_pk", &sz);
+    if ((buffer == NULL) || (sz != bsz)) goto error_cleanup3;
+    mpECP_init(r->session_pK, _curve);
+    result = mpECP_set_bytes(r->session_pK, buffer, sz, _curve);
+    if (result != 0) goto error_cleanup2;
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    // Read secret key from ASN1 structure
+    buffer = _asn1_read_octet_string_as_uchar(nar_asn1, "ctxt.c", &sz);
+    if ((buffer == NULL) || (sz != bsz)) goto error_cleanup2;
+    mpECP_init(r->ctxt->C, _curve);
+    result = mpECP_set_bytes(r->ctxt->C, buffer, sz, _curve);
+    if (result != 0) goto error_cleanup1;
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    // Read secret key from ASN1 structure
+    buffer = _asn1_read_octet_string_as_uchar(nar_asn1, "ctxt.d", &sz);
+    if ((buffer == NULL) || (sz != bsz)) goto error_cleanup1;
+    mpECP_init(r->ctxt->D, _curve);
+    result = mpECP_set_bytes(r->ctxt->D, buffer, sz, _curve);
+    if (result != 0) goto error_cleanup0;
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    return 0;
+
+error_cleanup0:
+    mpECP_clear(r->ctxt->D);
+
+error_cleanup1:
+    mpECP_clear(r->ctxt->C);
+
+error_cleanup2:
+    mpECP_clear(r->session_pK);
+
+error_cleanup3:
+    asn1_delete_structure(&nar_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
 }
 
 void ctNAKAuthResponse_clear(ctNAKAuthResponse_t r) {

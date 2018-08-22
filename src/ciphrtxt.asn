@@ -79,6 +79,7 @@ EGCiphertextWPublicKey ::= SEQUENCE {
 }
 
 CTNAKAuthResponse ::= SEQUENCE {
+    version     INTEGER,
     session_pk  OCTET STRING,
     ctxt        ELGamalCiphertext
 }
