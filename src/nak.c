@@ -37,6 +37,7 @@
 #include <inttypes.h>
 #include <libtasn1.h>
 #include <sodium.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -612,6 +613,224 @@ void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c) {
     c->session_expire = 0;
     c->n = 0;
     return;
+}
+
+unsigned char *ctNAKAuthChallenge_export_DER(ctNAKAuthChallenge_t c, size_t *sz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE nach_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    size_t bsz;
+    int result;
+    size_t length;
+    int sum;
+    int i;
+
+    // refuse to export a degenerate (n = 0) challenge
+    if (c->n < 1) return NULL;
+
+    sum = 0;
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return NULL;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTNAKAuthChallenge",
+        &nach_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, nach_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    bsz = mpECP_out_bytelen(c->session_pK, 1);
+    buffer = (unsigned char *)malloc(bsz*sizeof(char));
+
+    sum += _asn1_write_int64_as_integer(nach_asn1, "version", 1);
+    for (i = 0; i < c->n; i++) {
+            result = asn1_write_value (nach_asn1, "challenge", "NEW", 1);
+            assert(result == 0);
+            sum += 12;
+
+            mpECP_out_bytes(buffer, c->pK[i], 1);
+            sum += _asn1_write_uchar_string_as_octet_string(nach_asn1, "challenge.?LAST.public_key", buffer, bsz);
+            mpECP_out_bytes(buffer, c->ctxt[i]->C, 1);
+            sum += _asn1_write_uchar_string_as_octet_string(nach_asn1, "challenge.?LAST.ctxt.c", buffer, bsz);
+            mpECP_out_bytes(buffer, c->ctxt[i]->D, 1);
+            sum += _asn1_write_uchar_string_as_octet_string(nach_asn1, "challenge.?LAST.ctxt.d", buffer, bsz);
+    }
+    mpECP_out_bytes(buffer, c->session_pK, 1);
+    sum += _asn1_write_uchar_string_as_octet_string(nach_asn1, "session_pk", buffer, bsz);
+    free(buffer);
+    sum += _asn1_write_int64_as_integer(nach_asn1, "expire", (int64_t)c->session_expire);
+
+    sum += 256;  // pad for DER header + some extra just in case
+    length = sum;
+    buffer = (unsigned char *)malloc((sum) * sizeof(char));
+    assert(buffer != NULL);
+    {
+        int isz = length;
+        result = asn1_der_coding(nach_asn1, "", (char *)buffer, &isz, asnError);
+        length = isz;
+    }
+    if (result != 0) {
+        asn1_delete_structure(&nach_asn1);
+        asn1_delete_structure(&ct_asn1);
+        return NULL;
+    }
+    assert(length < sum);
+
+    asn1_delete_structure(&nach_asn1);
+    asn1_delete_structure(&ct_asn1);
+    *sz = length;
+    return buffer;
+}
+
+int ctNAKAuthChallenge_init_import_DER(ctNAKAuthChallenge_t c, unsigned char *der, size_t dsz) {
+    ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
+    ASN1_TYPE nach_asn1 = ASN1_TYPE_EMPTY;
+    char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
+    unsigned char *buffer;
+    size_t  bsz;
+    size_t  sz;
+    int result;
+    int i,n;
+
+    if (_sscheme == NULL) _sscheme_init();
+
+    result = asn1_array2tree(ciphrtxt_asn1_tab, &ct_asn1, asnError);
+    if (result != 0) return -1;
+
+    result = asn1_create_element(ct_asn1, "Ciphrtxt.CTNAKAuthChallenge",
+        &nach_asn1);
+    if (result != 0) {
+        asn1_delete_structure(&ct_asn1);
+        return -1;
+    }
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, nach_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    // read DER into ASN1 structure
+    result = asn1_der_decoding(&nach_asn1, (char *)der, (int)dsz, asnError);
+    if (result != ASN1_SUCCESS) return -1;
+
+    //printf("-----------------\n");
+    //asn1_print_structure(stdout, nach_asn1, "", ASN1_PRINT_ALL);
+    //printf("-----------------\n");
+
+    {
+        int64_t ver;
+        result = _asn1_read_int64_from_integer(&ver, nach_asn1, "version");
+        // version 1 is only known version at this time
+        if ((result != 0) || (ver != 1)) goto error_cleanup3;
+    }
+
+    bsz = mpECP_out_bytelen(_G, 1);
+
+    // Read secret key from ASN1 structure
+    buffer = _asn1_read_octet_string_as_uchar(nach_asn1, "session_pk", &sz);
+    if ((buffer == NULL) || (sz != bsz)) goto error_cleanup3;
+    mpECP_init(c->session_pK, _curve);
+    result = mpECP_set_bytes(c->session_pK, buffer, sz, _curve);
+    memset((void *)buffer, 0, sz);
+    free(buffer);
+
+    result = _asn1_read_int64_from_integer(&(c->session_expire), nach_asn1, "expire");
+    if (result != 0) goto error_cleanup2;
+
+    n = 0;
+    // first time through just count the number of keys
+    while(true) {
+        char abuffer[256];
+
+        sprintf(abuffer, "challenge.?%d.public_key", n+1);
+        buffer = _asn1_read_octet_string_as_uchar(nach_asn1, abuffer, &sz);
+        if (buffer == NULL) break;
+        memset((void *)buffer, 0, sz);
+        free(buffer);
+
+        n += 1;
+    }
+
+    if (n == 0) goto error_cleanup2;
+
+    c->pK = (mpECP_t *)malloc(n*sizeof(mpECP_t));
+    c->ctxt = (mpECElgamalCiphertext_t *)malloc(n*sizeof(mpECElgamalCiphertext_t));
+
+    for (i = 0; i < n; i++) {
+        char abuffer[256];
+
+        sprintf(abuffer, "challenge.?%d.public_key", i+1);
+        buffer = _asn1_read_octet_string_as_uchar(nach_asn1, abuffer, &sz);
+        if (buffer == NULL) goto error_cleanup1;
+        mpECP_init(c->pK[i], _curve);
+        result = mpECP_set_bytes(c->pK[i], buffer, sz, _curve);
+        if (result != 0) {
+            mpECP_clear(c->pK[i]);
+            goto error_cleanup1;
+        }
+        memset((void *)buffer, 0, sz);
+        free(buffer);
+
+        sprintf(abuffer, "challenge.?%d.ctxt.c", i+1);
+        buffer = _asn1_read_octet_string_as_uchar(nach_asn1, abuffer, &sz);
+        if (buffer == NULL) {
+            mpECP_clear(c->pK[i]);
+            goto error_cleanup1;
+        }
+        mpECP_init(c->ctxt[i]->C, _curve);
+        result = mpECP_set_bytes(c->ctxt[i]->C, buffer, sz, _curve);
+        if (result != 0) {
+            mpECP_clear(c->pK[i]);
+            mpECP_clear(c->ctxt[i]->C);
+            goto error_cleanup1;
+        }
+        memset((void *)buffer, 0, sz);
+        free(buffer);
+
+        sprintf(abuffer, "challenge.?%d.ctxt.d", i+1);
+        buffer = _asn1_read_octet_string_as_uchar(nach_asn1, abuffer, &sz);
+        if (buffer == NULL) {
+            mpECP_clear(c->pK[i]);
+            mpECP_clear(c->ctxt[i]->C);
+            goto error_cleanup1;
+        }
+        mpECP_init(c->ctxt[i]->D, _curve);
+        result = mpECP_set_bytes(c->ctxt[i]->D, buffer, sz, _curve);
+        if (result != 0) {
+            i += 1;
+            goto error_cleanup1;
+        }
+        memset((void *)buffer, 0, sz);
+        free(buffer);
+    }
+
+    c->n = n;
+    return 0;
+
+error_cleanup1:
+    for (n = 0; n < i; n++) {
+        mpECP_clear(c->pK[i]);
+        mpECP_clear(c->ctxt[i]->C);
+        mpECP_clear(c->ctxt[i]->D);
+    }
+    free(c->pK);
+    c->pK = NULL;
+    free(c->ctxt);
+    c->ctxt = NULL;
+
+error_cleanup2:
+    c->session_expire = 0;
+    mpECP_clear(c->session_pK);
+
+error_cleanup3:
+    asn1_delete_structure(&nach_asn1);
+    asn1_delete_structure(&ct_asn1);
+    return -1;
 }
 
 int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey sN) {

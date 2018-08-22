@@ -66,4 +66,26 @@ CTNAKPublicKey ::= SEQUENCE {
     not_after   INTEGER
 }
 
+CTNAKAuthChallenge ::= SEQUENCE {
+    version     INTEGER,
+    challenge   SEQUENCE OF EGCiphertextWPublicKey,
+    session_pk  OCTET STRING,
+    expire      INTEGER
+}
+
+EGCiphertextWPublicKey ::= SEQUENCE {
+    public_key  OCTET STRING,
+    ctxt        ELGamalCiphertext
+}
+
+CTNAKAuthResponse ::= SEQUENCE {
+    session_pk  OCTET STRING,
+    ctxt        ELGamalCiphertext
+}
+
+ELGamalCiphertext ::= SEQUENCE {
+    c           OCTET STRING,
+    d           OCTET STRING
+}
+
 END

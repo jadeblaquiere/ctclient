@@ -102,7 +102,7 @@ typedef _ctNAKAuthChallenge *ctNAKAuthChallenge_ptr;
 
 int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt);
 unsigned char *ctNAKAuthChallenge_export_DER(ctNAKAuthChallenge_t c, size_t *sz);
-int ctNAKAuthChallenge_import_DER(ctNAKAuthChallenge_t c, unsigned char *der, size_t sz);
+int ctNAKAuthChallenge_init_import_DER(ctNAKAuthChallenge_t c, unsigned char *der, size_t sz);
 void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c);
 
 typedef struct {

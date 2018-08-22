@@ -41,7 +41,7 @@ extern "C" {
 
 /* internal asn1 helper functions */ 
 
-int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, unsigned char *buffer, int len);
+int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, unsigned char *buffer, int sz);
 int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t value);
 
 unsigned char *_asn1_read_octet_string_as_uchar(asn1_node root, char *attribute, size_t *sz);

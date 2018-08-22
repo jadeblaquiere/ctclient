@@ -38,10 +38,10 @@
 #include <stdio.h>
 #include <string.h>
 
-int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, unsigned char *buffer, int len) {
+int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, unsigned char *buffer, int sz) {
     int result;
 
-    result = asn1_write_value(root, attribute, buffer, len);
+    result = asn1_write_value(root, attribute, buffer, (int)sz);
     //if (result != ASN1_SUCCESS) {
     //    int i;
     //    printf("error writing ");
@@ -51,7 +51,7 @@ int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, un
     //    printf(" to tag : %s\n", attribute);
     //}
     assert(result == ASN1_SUCCESS);
-    return 5 + len;
+    return 5 + sz;
 }
 
 int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t value) {

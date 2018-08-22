@@ -158,6 +158,7 @@ START_TEST(test_auth_challenge)
     ctNAKSecretKey sN;
     ctNAKPublicKey pN;
     ctNAKAuthChallenge_t ch;
+    ctNAKAuthChallenge_t ch_cp;
     ctNAKAuthResponse_t rs;
     mpECurve_ptr cvp;
     mpFp_t session_sK;
@@ -172,6 +173,8 @@ START_TEST(test_auth_challenge)
     int n = 50;
     int i;
     int status;
+    unsigned char *buffer;
+    size_t bsz;
 
     not_valid_before = getutime();
     not_valid_after = not_valid_before + (52 * UTIME_WEEKS);
@@ -204,6 +207,30 @@ START_TEST(test_auth_challenge)
     status = ctNAKAuthChallenge_init(ch, n, c_pN, session_pK, session_expire, r_ptxt);
     assert(status == 0);
 
+    buffer = ctNAKAuthChallenge_export_DER(ch, &bsz);
+    assert(buffer != NULL);
+
+    printf("challenge der (%zd bytes) = ", bsz);
+    for (i =  0; i < bsz; i++) {
+        printf("%02X", buffer[i]);
+    }
+    printf("\n");
+
+    status = ctNAKAuthChallenge_init_import_DER(ch_cp, buffer, bsz);
+    assert(status == 0);
+
+    assert(ch->session_expire == ch_cp->session_expire);
+    assert(mpECP_cmp(ch->session_pK, ch_cp->session_pK) == 0);
+    assert(ch->n == ch_cp->n);
+    for (i = 0; i < ch->n; i++) {
+        assert(mpECP_cmp(ch->pK[i], ch_cp->pK[i]) == 0);
+        assert(mpECP_cmp(ch->ctxt[i]->C, ch_cp->ctxt[i]->C) == 0);
+        assert(mpECP_cmp(ch->ctxt[i]->D, ch_cp->ctxt[i]->D) == 0);
+    }
+
+    free(buffer);
+    ctNAKAuthChallenge_clear(ch_cp);
+
     for (i = 0; i < n; i++) {
         status = ctNAKAuthResponse_init(rs, ch, c_sN[i]);
         assert(status == 0);
@@ -213,7 +240,7 @@ START_TEST(test_auth_challenge)
 
         ctNAKAuthResponse_clear(rs);
     }
-    
+
     ctNAKAuthChallenge_clear(ch);
     for (i = 0; i < n; i++) {
         ctNAKPublicKey_clear(c_pN[i]);
