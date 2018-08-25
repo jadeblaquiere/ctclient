@@ -1,4 +1,4 @@
-noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo ctmsg_enc ctmsg_dec ctmsg_info ctmsg_rehash
+noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo ctmsg_enc ctmsg_dec ctmsg_info ctmsg_rehash ctnak_gen ctnak_pub
 
 ctkey_gen_SOURCES = ctkey_gen.c b64file.c
 ctkey_gen_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
@@ -35,3 +35,11 @@ ctmsg_info_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
 ctmsg_rehash_SOURCES = ctmsg_rehash.c b64file.c
 ctmsg_rehash_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
 ctmsg_rehash_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnak_gen_SOURCES = ctnak_gen.c b64file.c
+ctnak_gen_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnak_gen_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnak_pub_SOURCES = ctnak_pub.c b64file.c
+ctnak_pub_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnak_pub_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
