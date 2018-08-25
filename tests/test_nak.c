@@ -278,6 +278,62 @@ START_TEST(test_auth_challenge)
     ctNAKSecretKey_clear(sN);
 END_TEST
 
+START_TEST(validate_signed_nak_size)
+    ctNAKSecretKey sN;
+    ctNAKPublicKey pN;
+    utime_t not_valid_before;
+    utime_t not_valid_after;
+    size_t bsz;
+
+    not_valid_before = getutime();
+    not_valid_after = not_valid_before + (365 * UTIME_DAYS);
+
+    ctNAKSecretKey_init_Gen(sN, not_valid_before, not_valid_after);
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
+
+    // public key point
+    bsz = mpECP_out_bytelen(pN->public_key, 1);
+    // not before
+    bsz += sizeof(utime_t);
+    // not after
+    bsz += sizeof(utime_t);
+    // signature "r"
+    bsz += (mpz_sizeinbase(sN->secret_key->fp->p, 2) + 7) >> 3;
+    // signature "s"
+    bsz += (mpz_sizeinbase(sN->secret_key->fp->p, 2) + 7) >> 3;
+
+    assert(bsz == CTNAK_SIGNED_KEY_LENGTH);
+
+    ctNAKPublicKey_clear(pN);
+    ctNAKSecretKey_clear(sN);
+END_TEST
+
+START_TEST(test_signed_nak)
+    ctNAKSecretKey sN;
+    ctNAKPublicKey pN;
+    utime_t not_valid_before;
+    utime_t not_valid_after;
+    unsigned char *buffer;
+    size_t bsz;
+    int valid;
+
+    not_valid_before = getutime();
+    not_valid_after = not_valid_before + (365 * UTIME_DAYS);
+
+    ctNAKSecretKey_init_Gen(sN, not_valid_before, not_valid_after);
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
+
+    buffer = ctNAKSignedPublicKey_init_ctNAKSecretKey(sN, &bsz);
+    assert(buffer != NULL);
+    assert(bsz == CTNAK_SIGNED_KEY_LENGTH);
+
+    valid = ctNAKSignedPublicKey_validate_cmp(buffer, bsz);
+    assert(valid == 0);
+
+    ctNAKPublicKey_clear(pN);
+    ctNAKSecretKey_clear(sN);
+END_TEST
+
 static Suite *mpCT_test_suite(void) {
     Suite *s;
     TCase *tc;
@@ -289,6 +345,8 @@ static Suite *mpCT_test_suite(void) {
     tcase_add_test(tc, test_sign_verify);
     tcase_add_test(tc, test_export_import);
     tcase_add_test(tc, test_auth_challenge);
+    tcase_add_test(tc, validate_signed_nak_size);
+    tcase_add_test(tc, test_signed_nak);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

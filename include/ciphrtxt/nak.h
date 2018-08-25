@@ -79,9 +79,18 @@ int ctNAKSignature_init_import_bytes(mpECDSASignature_t sig, unsigned char *bsig
 void ctNAKSignature_clear(mpECDSASignature_t sig);
 
 // signed PUBLIC Key (as present in blockchain xactions)
-//unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
-//int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
-//int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
+// format is:
+// 0x00 - 0x20 (33 bytes) public key (EC Point)
+// 0x21 - 0x29 (8 bytes) not before
+// 0x29 - 0x30 (8 bytes) not after
+// 0x31 - 0x50 (32 bytes) signature "r"
+// 0x51 - 0x70 (32 bytes) signature "s"
+
+#define CTNAK_SIGNED_KEY_LENGTH  (0x71)
+
+unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
+int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
+int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
 
 // anonymous authentication methods (based on model proposed by Daniel Slamanig
 // in Anonymous Authentication from Public-Key Encryption Revisited)

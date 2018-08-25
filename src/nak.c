@@ -36,6 +36,7 @@
 #include <gmp.h>
 #include <inttypes.h>
 #include <libtasn1.h>
+#include <portable_endian.h>
 #include <sodium.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -49,6 +50,7 @@ static cwHash_ptr _aa_cwhash = NULL;
 
 static char *_curvename = "secp256k1";
 #define _CURVE_N_BYTES    (32U)
+#define _CURVE_P_BYTES    (32U)
 
 // constants for carter-wegman universal hash
 // p = 2**414 - 17;
@@ -482,10 +484,132 @@ void ctNAKSignature_clear(mpECDSASignature_t sig) {
     return;
 }
 
+static void _ctNak_mpFp_out_bytes(unsigned char *b, mpFp_t a) {
+    size_t bsz = _CURVE_P_BYTES;
+    size_t wsz;
+    mpz_t ampz;
+
+    mpz_init(ampz);
+    mpz_set_mpFp(ampz, a);
+    wsz = bsz;
+    mpz_export(b, &wsz, 1, 1, 1, 0, ampz);
+    if (wsz == bsz) return;
+
+    assert(wsz < bsz);
+    // if wsz < bsz we have a short write. shift right as required
+    {
+        int i;
+        size_t shift = bsz - wsz;
+        for (i = (wsz - 1); i >= 0; i--) {
+            b[i+shift] = b[i];
+        }
+        for (i = 0; i < shift; i++) {
+            b[i] = 0;
+        }
+    }
+    return;
+}
+
 // signed PUBLIC Key (as present in blockchain xactions)
-//unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
-//int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
-//int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
+unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz) {
+    ctNAKPublicKey pN;
+    mpECDSASignature_t sig;
+    unsigned char *buffer;
+    unsigned char *b;
+    size_t bsz;
+    int status;
+
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
+    bsz = CTNAK_SIGNED_KEY_LENGTH;
+    buffer = (unsigned char *)malloc(bsz * sizeof(char));
+
+    b = buffer;
+    mpECP_out_bytes(b, pN->public_key, 1);
+    b += (1 + _CURVE_P_BYTES);
+    *((int64_t *)b) = htole64((int64_t) sN->not_valid_before);
+    b += sizeof(int64_t);
+    *((int64_t *)b) = htole64((int64_t) sN->not_valid_after);
+    b += sizeof(int64_t);
+
+    assert((b - buffer) == (17 + _CURVE_P_BYTES));
+    status = ctNAKSignature_init_Sign(sig, sN, buffer, 17 + _CURVE_P_BYTES);
+    if (status != 0) {
+        ctNAKSignature_clear(sig);
+        ctNAKPublicKey_clear(pN);
+        free(buffer);
+        return NULL;
+    }
+
+    _ctNak_mpFp_out_bytes(b, sig->r);
+    b += _CURVE_P_BYTES;
+    _ctNak_mpFp_out_bytes(b, sig->s);
+    b += _CURVE_P_BYTES;
+    assert((b - buffer) == CTNAK_SIGNED_KEY_LENGTH);
+
+    ctNAKSignature_clear(sig);
+    ctNAKPublicKey_clear(pN);
+    *sz = CTNAK_SIGNED_KEY_LENGTH;
+    return buffer;
+}
+
+static void _ctNak_mpFp_set_bytes(mpFp_t a, unsigned char *b) {
+    mpz_t ampz;
+
+    mpz_init(ampz);
+    mpz_import(ampz, _CURVE_P_BYTES, 1, sizeof(char), 1, 0, b);
+
+    mpFp_set_mpz(a, ampz, _curve->n);
+    mpz_clear(ampz);
+    return;
+}
+
+int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz) {
+    unsigned char *b = bin;
+    int result;
+
+    // wrong length -> invalid
+    if (sz != CTNAK_SIGNED_KEY_LENGTH) return -1;
+
+    mpECP_init(pN->public_key, _curve);
+    result = mpECP_set_bytes(pN->public_key, b, (1 + _CURVE_P_BYTES), _curve);
+    // invalid curve point -> invalid
+    if (result != 0) {
+        mpECP_clear(pN->public_key);
+        return -1;
+    }
+    b += (1 + _CURVE_P_BYTES);
+
+    pN->not_valid_before = le64toh(*((utime_t *)b));
+    b += sizeof(utime_t);
+    pN->not_valid_after = le64toh(*((utime_t *)b));
+    return 0;
+}
+
+int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz) {
+    unsigned char *b = bin;
+    ctNAKPublicKey pN;
+    mpECDSASignature_t sig;
+    int result;
+
+    if (_sscheme == NULL) _sscheme_init();
+
+    result = ctNAKSignedPublicKey_init_import(pN, bin, sz);
+    if (result != 0) return -1;
+
+    b = bin + (17 + _CURVE_P_BYTES);
+    sig->sscheme = _sscheme;
+    mpFp_init(sig->r, _sscheme->cvp->n);
+    _ctNak_mpFp_set_bytes(sig->r, b);
+    b += _CURVE_P_BYTES;
+    mpFp_init(sig->s, _sscheme->cvp->n);
+    _ctNak_mpFp_set_bytes(sig->s, b);
+
+    result = ctNAKSignature_verify_cmp(sig, pN, bin, (17 + _CURVE_P_BYTES));
+
+    mpECDSASignature_clear(sig);
+    ctNAKPublicKey_clear(pN);
+    return result;
+}
 
 // Slamanig's Anonymous Authentication method requires deterministic encryption
 // but can leverage probablistic encryption models using a subtitution for
