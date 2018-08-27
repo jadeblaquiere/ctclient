@@ -86,11 +86,14 @@ int main(int argc, char **argv) {
     }
  
     result = ctNAKSecretKey_init_import_DER(sN, der, sz);
-    assert(result == 0);
+    if (result != 0) {
+        fprintf(stderr,"<ParseError>: unable to import SECRET NAK data\n");
+        exit(1);
+    }
+    free(der);
     
     ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
 
-    //printf("exporting key\n");
     der = ctNAKPublicKey_export_DER(pN, &sz);
     assert(der != NULL);
 

@@ -567,6 +567,8 @@ int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size
     unsigned char *b = bin;
     int result;
 
+    if (_sscheme == NULL) _sscheme_init();
+
     // wrong length -> invalid
     if (sz != CTNAK_SIGNED_KEY_LENGTH) return -1;
 
@@ -590,8 +592,6 @@ int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz) {
     ctNAKPublicKey pN;
     mpECDSASignature_t sig;
     int result;
-
-    if (_sscheme == NULL) _sscheme_init();
 
     result = ctNAKSignedPublicKey_init_import(pN, bin, sz);
     if (result != 0) return -1;

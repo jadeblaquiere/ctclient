@@ -63,7 +63,7 @@ size_t utime_strftime(char *s, size_t max, char *format, utime_t utm);
 
 // handy constants for larger time units
 
-#define UTIME_SECONDS   (1000000U)
+#define UTIME_SECONDS   (1000000ULL)
 #define UTIME_MINUTES   (60 * UTIME_SECONDS)
 #define UTIME_HOURS     (60 * UTIME_MINUTES)
 #define UTIME_DAYS      (24 * UTIME_HOURS)

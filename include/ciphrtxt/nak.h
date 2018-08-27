@@ -69,7 +69,7 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t
 void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN);
 void ctNAKPublicKey_clear(ctNAKPublicKey pN);
 unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz);
-int ctNAKPublicKey_init_import_DER(ctNAKPublicKey sN, unsigned char *der, size_t sz);
+int ctNAKPublicKey_init_import_DER(ctNAKPublicKey pN, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
 int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz);

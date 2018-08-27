@@ -1,4 +1,6 @@
-noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo ctmsg_enc ctmsg_dec ctmsg_info ctmsg_rehash ctnak_gen ctnak_pub
+noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo \
+    ctmsg_enc ctmsg_dec ctmsg_info ctmsg_rehash ctnak_gen ctnak_pub \
+    ctnak_sninfo ctnak_pninfo ctnak_signpub ctnak_spninfo
 
 ctkey_gen_SOURCES = ctkey_gen.c b64file.c
 ctkey_gen_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
@@ -43,3 +45,19 @@ ctnak_gen_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
 ctnak_pub_SOURCES = ctnak_pub.c b64file.c
 ctnak_pub_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
 ctnak_pub_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnak_sninfo_SOURCES = ctnak_sninfo.c b64file.c
+ctnak_sninfo_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnak_sninfo_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnak_pninfo_SOURCES = ctnak_pninfo.c b64file.c
+ctnak_pninfo_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnak_pninfo_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnak_signpub_SOURCES = ctnak_signpub.c b64file.c
+ctnak_signpub_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnak_signpub_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnak_spninfo_SOURCES = ctnak_spninfo.c b64file.c
+ctnak_spninfo_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnak_spninfo_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)

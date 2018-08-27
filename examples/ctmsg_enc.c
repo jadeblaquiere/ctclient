@@ -219,7 +219,10 @@ int main(int argc, char **argv) {
     }
  
     result = ctPublicKey_init_decode_DER(pK, der, sz);
-    assert(result == 0);
+    if (result != 0) {
+        fprintf(stderr,"<ParseError>: unable to import PUBLIC KEY data\n");
+        exit(1);
+    }
     
     free(der);
 
@@ -232,7 +235,10 @@ int main(int argc, char **argv) {
         }
      
         result = ctSecretKey_init_decode_DER(sK, der, sz);
-        assert(result == 0);
+        if (result != 0) {
+            fprintf(stderr,"<ParseError>: unable to import SECRET KEY data\n");
+            exit(1);
+        }
     }
 
     // postage rate = 0 during encryption. Will need to query network to get

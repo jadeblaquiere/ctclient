@@ -32,14 +32,10 @@
 #include <b64file.h>
 #include <check.h>
 #include <ciphrtxt.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <popt.h>
-#include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
-#include <time.h>
 
 static void print_utime(utime_t utm) {
     char buffer[256];
@@ -60,14 +56,12 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctSecretKey sK;
-    ctPublicKey pK;
+    ctNAKSecretKey sN;
+    ctNAKPublicKey pN;
+    mpz_t smpz;
     unsigned char *der;
     size_t sz;
     int result;
-    int i;
-    unsigned char sK_hash[crypto_generichash_BYTES];
-    unsigned char pK_hash[crypto_generichash_BYTES];
 
     // pc is the context for all popt-related functions
     pc = poptGetContext(NULL, argc, (const char **)argv, po, 0);
@@ -85,7 +79,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-
+    
     if (filename != NULL) {
         fPtr = fopen(filename, "r");
         if (fPtr == NULL) {
@@ -96,55 +90,47 @@ int main(int argc, char **argv) {
 
     // HERE IS WHERE THE ACTUAL EXAMPLE STARTS... everything before is
     // processing and very limited validation of command line options
-    der = (unsigned char *)read_b64wrapped_from_file(fPtr, "CIPHRTXT SECRET KEY", &sz);
+    der = (unsigned char *)read_b64wrapped_from_file(fPtr, "CIPHRTXT SECRET NETWORK ACCESS KEY", &sz);
     if (der == NULL) {
         fprintf(stderr,"<ParseError>: unable to decode b64 data\n");
         exit(1);
     }
-
-    result = ctSecretKey_init_decode_DER(sK, der, sz);
+ 
+    result = ctNAKSecretKey_init_import_DER(sN, der, sz);
     if (result != 0) {
-        fprintf(stderr,"<ParseError>: unable to import SECRET KEY data\n");
+        fprintf(stderr,"<ParseError>: unable to import SECRET NAK data\n");
         exit(1);
     }
     
-    ctPublicKey_init_ctSecretKey(pK, sK);
+    ctNAKPublicKey_init_ctNAKSecretKey(pN, sN);
 
-    crypto_generichash(sK_hash, sizeof(sK_hash), der, (unsigned long long)sz, NULL, 0);
+    mpz_init(smpz);
+    mpz_set_mpFp(smpz, sN->secret_key);
+    gmp_printf("secret key value : %064ZX\n", smpz);
+    mpz_clear(smpz);
+    
+    {
+        char *buffer;
+        size_t bsz;
 
-    printf("ciphrtxt secret key, hash(blake2b) = ");
-    for (i = 0; i < sizeof(sK_hash); i++) {
-        printf("%02X", sK_hash[i]);
+        bsz = mpECP_out_strlen(pN->public_key, 1);
+        buffer = (char *)malloc((bsz + 1)*sizeof(char));
+        mpECP_out_str(buffer, pN->public_key, 1);
+        printf("public key value : %s\n", buffer);
+        free(buffer);
     }
-    printf("\n");
-    
-    free(der);
-    der = ctPublicKey_Export_DER(pK, &sz);
-    
-    crypto_generichash(pK_hash, sizeof(pK_hash), der, (unsigned long long)sz, NULL, 0);
-
-    printf("associated public key, hash(blake2b) = ");
-    for (i = 0; i < sizeof(pK_hash); i++) {
-        printf("%02X", pK_hash[i]);
-    }
-    printf("\n");
-    
-    printf("Initial key time: ");
-    print_utime(sK->t0);
-    printf("\n");
 
     printf("Not valid before: ");
-    print_utime(_ctSecretKey_time_for_interval(sK, sK->_intervalMin));
+    print_utime(sN->not_valid_before);
     printf("\n");
 
-    printf("Not valid after: ");
-    print_utime(_ctSecretKey_time_for_interval(sK, sK->_intervalMax));
+    printf("Not valid after : ");
+    print_utime(sN->not_valid_after);
     printf("\n");
-    
-    printf("Forward Secure Resolution : %" PRId64 ".%06" PRId64" seconds\n", (sK->tStep) / (1000000), (sK->tStep) % (1000000));
 
     free(der);
-    ctSecretKey_clear(sK);
+    ctNAKPublicKey_clear(pN);
+    ctNAKSecretKey_clear(sN);
 
     return 0;
 }
