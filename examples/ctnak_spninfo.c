@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctNAKPublicKey pN;
+    ctNAKPublicKey_t pN;
     unsigned char *der;
     size_t sz;
     int result;

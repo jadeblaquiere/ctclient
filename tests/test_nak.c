@@ -42,8 +42,8 @@
 #define TEST_ITERATIONS (1000)
 
 START_TEST(test_init_clear)
-    ctNAKSecretKey sN;
-    ctNAKPublicKey pN;
+    ctNAKSecretKey_t sN;
+    ctNAKPublicKey_t pN;
     utime_t not_valid_before;
     utime_t not_valid_after;
 
@@ -57,8 +57,8 @@ START_TEST(test_init_clear)
 END_TEST
 
 START_TEST(test_sign_verify)
-    ctNAKSecretKey sN;
-    ctNAKPublicKey pN;
+    ctNAKSecretKey_t sN;
+    ctNAKPublicKey_t pN;
     mpECDSASignature_t sig;
     utime_t not_valid_before;
     utime_t not_valid_after;
@@ -96,10 +96,10 @@ START_TEST(test_sign_verify)
 END_TEST
 
 START_TEST(test_export_import)
-    ctNAKSecretKey sN;
-    ctNAKSecretKey sNcp;
-    ctNAKPublicKey pN;
-    ctNAKPublicKey pNcp;
+    ctNAKSecretKey_t sN;
+    ctNAKSecretKey_t sNcp;
+    ctNAKPublicKey_t pN;
+    ctNAKPublicKey_t pNcp;
     utime_t not_valid_before;
     utime_t not_valid_after;
     unsigned char *der;
@@ -155,8 +155,8 @@ START_TEST(test_export_import)
 END_TEST
 
 START_TEST(test_auth_challenge)
-    ctNAKSecretKey sN;
-    ctNAKPublicKey pN;
+    ctNAKSecretKey_t sN;
+    ctNAKPublicKey_t pN;
     ctNAKAuthChallenge_t ch;
     ctNAKAuthChallenge_t ch_cp;
     ctNAKAuthResponse_t rs;
@@ -168,8 +168,8 @@ START_TEST(test_auth_challenge)
     utime_t not_valid_before;
     utime_t not_valid_after;
     utime_t session_expire;
-    ctNAKSecretKey *c_sN;
-    ctNAKPublicKey *c_pN;
+    ctNAKSecretKey_t *c_sN;
+    ctNAKPublicKey_t *c_pN;
     int n = 50;
     int i;
     int status;
@@ -191,8 +191,8 @@ START_TEST(test_auth_challenge)
     mpECP_init(session_pK, cvp);
     mpECP_scalar_mul(session_pK, Gpt, session_sK);
 
-    c_sN = (ctNAKSecretKey *)malloc(n * sizeof(ctNAKSecretKey));
-    c_pN = (ctNAKPublicKey *)malloc(n * sizeof(ctNAKPublicKey));
+    c_sN = (ctNAKSecretKey_t *)malloc(n * sizeof(ctNAKSecretKey_t));
+    c_pN = (ctNAKPublicKey_t *)malloc(n * sizeof(ctNAKPublicKey_t));
 
     for (i = 0; i < n; i++) {
         ctNAKSecretKey_init_Gen(c_sN[i], not_valid_before, not_valid_after);
@@ -279,8 +279,8 @@ START_TEST(test_auth_challenge)
 END_TEST
 
 START_TEST(validate_signed_nak_size)
-    ctNAKSecretKey sN;
-    ctNAKPublicKey pN;
+    ctNAKSecretKey_t sN;
+    ctNAKPublicKey_t pN;
     utime_t not_valid_before;
     utime_t not_valid_after;
     size_t bsz;
@@ -309,8 +309,8 @@ START_TEST(validate_signed_nak_size)
 END_TEST
 
 START_TEST(test_signed_nak)
-    ctNAKSecretKey sN;
-    ctNAKPublicKey pN;
+    ctNAKSecretKey_t sN;
+    ctNAKPublicKey_t pN;
     utime_t not_valid_before;
     utime_t not_valid_after;
     unsigned char *buffer;

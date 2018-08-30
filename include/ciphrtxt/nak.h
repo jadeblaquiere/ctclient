@@ -45,35 +45,35 @@ typedef struct {
     mpFp_t  secret_key_inv;
     utime_t not_valid_before;
     utime_t not_valid_after;
-} _ctNAKSecretKey;
+} _ctNAKSecretKey_t;
 
-typedef _ctNAKSecretKey ctNAKSecretKey[1];
-typedef _ctNAKSecretKey *ctNAKSecretKey_ptr;
+typedef _ctNAKSecretKey_t ctNAKSecretKey_t[1];
+typedef _ctNAKSecretKey_t *ctNAKSecretKey_ptr;
 
 typedef struct {
     mpECP_t public_key;
     utime_t not_valid_before;
     utime_t not_valid_after;
-} _ctNAKPublicKey;
+} _ctNAKPublicKey_t;
 
-typedef _ctNAKPublicKey ctNAKPublicKey[1];
-typedef _ctNAKPublicKey *ctNAKPublicKey_ptr;
+typedef _ctNAKPublicKey_t ctNAKPublicKey_t[1];
+typedef _ctNAKPublicKey_t *ctNAKPublicKey_ptr;
 
 // create, delete, import export for SECRET Key
-void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva);
-void ctNAKSecretKey_clear(ctNAKSecretKey sN);
-unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey sN, size_t *sz);
-int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t sz);
+void ctNAKSecretKey_init_Gen(ctNAKSecretKey_t sN, utime_t nvb, utime_t nva);
+void ctNAKSecretKey_clear(ctNAKSecretKey_t sN);
+unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey_t sN, size_t *sz);
+int ctNAKSecretKey_init_import_DER(ctNAKSecretKey_t sN, unsigned char *der, size_t sz);
 
 // create, delete, import export for PUBLIC Key
-void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN);
-void ctNAKPublicKey_clear(ctNAKPublicKey pN);
-unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz);
-int ctNAKPublicKey_init_import_DER(ctNAKPublicKey pN, unsigned char *der, size_t sz);
+void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey_t pN, ctNAKSecretKey_t sN);
+void ctNAKPublicKey_clear(ctNAKPublicKey_t pN);
+unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey_t pN, size_t *sz);
+int ctNAKPublicKey_init_import_DER(ctNAKPublicKey_t pN, unsigned char *der, size_t sz);
 
 // ECDSA Signatures
-int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz);
-int ctNAKSignature_verify_cmp(mpECDSASignature_t sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz);
+int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey_t sN, unsigned char *msg, size_t sz);
+int ctNAKSignature_verify_cmp(mpECDSASignature_t sig, ctNAKPublicKey_t pN, unsigned char *msg, size_t sz);
 unsigned char *ctNAKSignature_export_bytes(mpECDSASignature_t sig, size_t *sz);
 int ctNAKSignature_init_import_bytes(mpECDSASignature_t sig, unsigned char *bsig, size_t sz);
 void ctNAKSignature_clear(mpECDSASignature_t sig);
@@ -88,8 +88,8 @@ void ctNAKSignature_clear(mpECDSASignature_t sig);
 
 #define CTNAK_SIGNED_KEY_LENGTH  (0x71)
 
-unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz);
-int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz);
+unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey_t sN, size_t *sz);
+int ctNAKSignedPublicKey_init_import(ctNAKPublicKey_t pN, unsigned char *bin, size_t sz);
 int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz);
 
 // anonymous authentication methods (based on model proposed by Daniel Slamanig
@@ -104,12 +104,12 @@ typedef struct {
     mpECP_t *pK;
     mpECP_t session_pK;
     utime_t session_expire;
-} _ctNAKAuthChallenge;
+} _ctNAKAuthChallenge_t;
 
-typedef _ctNAKAuthChallenge ctNAKAuthChallenge_t[1];
-typedef _ctNAKAuthChallenge *ctNAKAuthChallenge_ptr;
+typedef _ctNAKAuthChallenge_t ctNAKAuthChallenge_t[1];
+typedef _ctNAKAuthChallenge_t *ctNAKAuthChallenge_ptr;
 
-int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt);
+int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_t *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt);
 unsigned char *ctNAKAuthChallenge_export_DER(ctNAKAuthChallenge_t c, size_t *sz);
 int ctNAKAuthChallenge_init_import_DER(ctNAKAuthChallenge_t c, unsigned char *der, size_t sz);
 void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c);
@@ -117,12 +117,12 @@ void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c);
 typedef struct {
     mpECP_t session_pK;
     mpECElgamalCiphertext_t ctxt;
-} _ctNAKAuthResponse;
+} _ctNAKAuthResponse_t;
 
-typedef _ctNAKAuthResponse ctNAKAuthResponse_t[1];
-typedef _ctNAKAuthResponse *ctNAKAuthResponse_ptr;
+typedef _ctNAKAuthResponse_t ctNAKAuthResponse_t[1];
+typedef _ctNAKAuthResponse_t *ctNAKAuthResponse_ptr;
 
-int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey sN);
+int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey_t sN);
 int ctNAKAuthResponse_validate_cmp(ctNAKAuthResponse_t r, mpFp_t session_sK, mpECP_t ptxt);
 unsigned char *ctNAKAuthResponse_export_DER(ctNAKAuthResponse_t r, size_t *sz);
 int ctNAKAuthResponse_init_import_DER(ctNAKAuthResponse_t, unsigned char *der, size_t sz);

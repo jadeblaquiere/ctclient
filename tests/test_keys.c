@@ -56,8 +56,8 @@ static int64_t _pow_i64(int64_t x, int64_t e) {
 // security assumptions related to the encryption code which rely on ECDLP
 // and similar assumptions to be valid (and hence we assume ~256-bit types).
 START_TEST(test_sizes)
-    ctSecretKey sK;
-    ctPublicKey pK;
+    ctSecretKey_t sK;
+    ctPublicKey_t pK;
     
     assert(sizeof(sK->addr_sec) == (32U));
     assert(sizeof(sK->enc_sec) == (32U));
@@ -73,8 +73,8 @@ START_TEST(test_sizes)
 END_TEST
 
 START_TEST(test_init_key)
-    ctSecretKey sK;
-    ctPublicKey pK;
+    ctSecretKey_t sK;
+    ctPublicKey_t pK;
     _ed25519sk  sZero;
     
     memset(sZero, 0, sizeof(sZero));
@@ -95,7 +95,7 @@ START_TEST(test_init_key)
 END_TEST
 
 START_TEST(test_key_intervals)
-    ctSecretKey sK;
+    ctSecretKey_t sK;
     int64_t maxInterval;
     int64_t maxTime;
 
@@ -122,7 +122,7 @@ START_TEST(test_key_intervals)
 END_TEST
 
 START_TEST(test_key_export_import)
-    ctSecretKey sK1, sK2;
+    ctSecretKey_t sK1, sK2;
     unsigned char *der1, *der2, *chkder1, *chkder2;
     size_t sz1, sz2;
     size_t chksz1, chksz2;
@@ -168,8 +168,8 @@ START_TEST(test_key_export_import)
 END_TEST
 
 START_TEST(test_key_export_pubkey_import)
-    ctSecretKey sK1;
-    ctPublicKey pK1, pK2;
+    ctSecretKey_t sK1;
+    ctPublicKey_t pK1, pK2;
     unsigned char *der1, *der2;
     size_t sz1, sz2;
     int result;

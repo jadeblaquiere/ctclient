@@ -70,7 +70,7 @@ static int64_t _pow_i64(int64_t x, int64_t e) {
 
 // negative intervals are always invalid... doesn't matter how negative
 
-int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, utime_t t) {
+int64_t _ctSecretKey_interval_for_time(ctSecretKey_t sK, utime_t t) {
     if (t >= sK->t0) {
         return (int64_t)((t - sK->t0) / sK->tStep);
     } else {
@@ -78,11 +78,11 @@ int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, utime_t t) {
     }
 }
 
-utime_t _ctSecretKey_time_for_interval(ctSecretKey sK, int64_t i) {
+utime_t _ctSecretKey_time_for_interval(ctSecretKey_t sK, int64_t i) {
     return sK->t0 + (utime_t)(i * sK->tStep);
 }
 
-int64_t _ctPublicKey_interval_for_time(ctPublicKey pK, utime_t t) {
+int64_t _ctPublicKey_interval_for_time(ctPublicKey_t pK, utime_t t) {
     if (t >= pK->t0) {
         return (int64_t)((t - pK->t0) / pK->tStep);
     } else {
@@ -90,11 +90,11 @@ int64_t _ctPublicKey_interval_for_time(ctPublicKey pK, utime_t t) {
     }
 }
 
-utime_t _ctPublicKey_time_for_interval(ctPublicKey pK, int64_t i) {
+utime_t _ctPublicKey_time_for_interval(ctPublicKey_t pK, int64_t i) {
     return pK->t0 + (utime_t)(i * pK->tStep);
 }
 
-void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int order, utime_t tStep) {
+void ctSecretKey_init_Gen(ctSecretKey_t sK, int qbits, int rbits, int depth, int order, utime_t tStep) {
     int qb, rb, d, o;
     _ed25519pk test_mul;
 
@@ -151,11 +151,11 @@ void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int o
     sK->_intervalMax = _pow_i64((int64_t)o, (int64_t)d);
 }
 
-void ctSecretKey_clear(ctSecretKey sK) {
+void ctSecretKey_clear(ctSecretKey_t sK) {
     CHKPKE_clear(sK->chk_sec);
 }
 
-unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, utime_t tStart, utime_t tEnd, size_t *sz) {
+unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey_t sK, utime_t tStart, utime_t tEnd, size_t *sz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE sK_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -228,14 +228,14 @@ unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, utime_t tStart
     return buffer;
 }
 
-unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, utime_t tStart, size_t *sz) {
+unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey_t sK, utime_t tStart, size_t *sz) {
     utime_t tEnd;
     
     tEnd = _ctSecretKey_time_for_interval(sK, sK->_intervalMax - 1);
     return ctSecretKey_Export_FS_Delegate_DER(sK, tStart, tEnd, sz);
 }
 
-int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz) {
+int ctSecretKey_init_decode_DER(ctSecretKey_t sK, unsigned char *der, size_t dsz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE sK_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -327,7 +327,7 @@ error_cleanup3:
     return -1;
 }
 
-void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
+void ctPublicKey_init_ctSecretKey(ctPublicKey_t pK, ctSecretKey_t sK) {
     unsigned char *chkder;
     size_t chkdersz;
 
@@ -342,12 +342,12 @@ void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK) {
     pK->tStep = sK->tStep;
 }
 
-void ctPublicKey_clear(ctPublicKey pK) {
+void ctPublicKey_clear(ctPublicKey_t pK) {
     CHKPKE_clear(pK->chk_pub);
     memset((void *)pK, 0, sizeof(*pK));
 }
 
-unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
+unsigned char *ctPublicKey_Export_DER(ctPublicKey_t pK, size_t *sz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE pK_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -412,7 +412,7 @@ unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz) {
     return buffer;
 }
 
-int ctPublicKey_init_decode_DER(ctPublicKey pK, unsigned char *der, size_t dsz) {
+int ctPublicKey_init_decode_DER(ctPublicKey_t pK, unsigned char *der, size_t dsz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE pK_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];

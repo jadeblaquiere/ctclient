@@ -97,9 +97,9 @@ int main(int argc, char **argv) {
         {NULL}
     };
     ctSecretKey_ptr sK = NULL;
-    ctPublicKey pK;
-    ctMessage ctM;
-    ctPostageRate pr;
+    ctPublicKey_t pK;
+    ctMessage_t ctM;
+    ctPostageRate_t pr;
     unsigned char *der;
     size_t sz;
     unsigned char *ctext;
@@ -227,7 +227,7 @@ int main(int argc, char **argv) {
     free(der);
 
     if (from != NULL) {
-        sK = (ctSecretKey_ptr)malloc(sizeof(ctSecretKey));
+        sK = (ctSecretKey_ptr)malloc(sizeof(ctSecretKey_t));
         der = (unsigned char *)read_b64wrapped_from_file(fmPtr, "CIPHRTXT SECRET KEY", &sz);
         if (der == NULL) {
             fprintf(stderr,"<ParseError>: unable to decode b64 data\n");

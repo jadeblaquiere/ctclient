@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctSecretKey sK;
+    ctSecretKey_t sK;
     unsigned char *der;
     size_t sz;
     int result;

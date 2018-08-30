@@ -49,17 +49,17 @@ typedef struct {
     uint32_t    base_fraction;
     uint32_t    l2blocks_whole;
     uint32_t    l2blocks_fraction;
-} _ctPostageRate;
+} _ctPostageRate_t;
 
-typedef _ctPostageRate ctPostageRate[1];
-typedef _ctPostageRate *ctPostageRate_ptr;
+typedef _ctPostageRate_t ctPostageRate_t[1];
+typedef _ctPostageRate_t *ctPostageRate_ptr;
 
 #define _CT_HASHTARGET_SZ   (crypto_generichash_BYTES)
 
-typedef unsigned char    ctPostageHash[_CT_HASHTARGET_SZ];
+typedef unsigned char    ctPostageHash_t[_CT_HASHTARGET_SZ];
 
-int ctPostage_hash_target(ctPostageHash hash, ctPostageRate rate, uint64_t blocksz);
-int ctPostage_hash_cmp(ctPostageHash hash, ctPostageHash target);
+int ctPostage_hash_target(ctPostageHash_t hash, ctPostageRate_t rate, uint64_t blocksz);
+int ctPostage_hash_cmp(ctPostageHash_t hash, ctPostageHash_t target);
 
 #ifdef __cplusplus
 }

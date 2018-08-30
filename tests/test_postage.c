@@ -41,7 +41,7 @@
 #include <time.h>
 
 START_TEST(test_hash_targets)
-    ctPostageRate pr;
+    ctPostageRate_t pr;
     int i, j;
     int status;
     uint64_t blocks;
@@ -56,7 +56,7 @@ START_TEST(test_hash_targets)
     blocks = 1;
     for (i = 0; i < 40; i++ ) {
         uint64_t bytes;
-        ctPostageHash phash;
+        ctPostageHash_t phash;
 
         bytes = blocks * _CT_BLKSZ;
         if (bytes > 1024) {
@@ -91,12 +91,12 @@ START_TEST(test_hash_targets)
 END_TEST
 
 START_TEST(test_hash_compare)
-    ctPostageRate pr;
+    ctPostageRate_t pr;
     int i;
     int status;
-    ctPostageHash ptgt;
-    ctPostageHash random;
-    ctPostageHash hash;
+    ctPostageHash_t ptgt;
+    ctPostageHash_t random;
+    ctPostageHash_t hash;
     
     // base value = 10 + (1 / 65536)
     pr->base_whole = 10;
@@ -149,10 +149,10 @@ START_TEST(test_hash_compare)
 END_TEST
 
 START_TEST(test_zero_postage)
-    ctPostageRate pr;
+    ctPostageRate_t pr;
     int i;
     int status;
-    ctPostageHash ptgt;
+    ctPostageHash_t ptgt;
     
     // base value = 0
     pr->base_whole = 0;

@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctNAKSecretKey sN;
+    ctNAKSecretKey_t sN;
     utime_t nvbtime;
     utime_t nvatime;
     unsigned char *der;

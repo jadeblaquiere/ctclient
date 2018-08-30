@@ -35,7 +35,7 @@
 #include <math.h>
 #include <string.h>
 
-int ctPostage_hash_target(ctPostageHash hash, ctPostageRate rate, uint64_t blocksz) {
+int ctPostage_hash_target(ctPostageHash_t hash, ctPostageRate_t rate, uint64_t blocksz) {
     mpz_t numer, denom;
     double frac;
     size_t hsz;
@@ -91,7 +91,7 @@ int ctPostage_hash_target(ctPostageHash hash, ctPostageRate rate, uint64_t block
     return 0;
 }
 
-int ctPostage_hash_cmp(ctPostageHash hash, ctPostageHash target) {
+int ctPostage_hash_cmp(ctPostageHash_t hash, ctPostageHash_t target) {
     int i;
     
     for (i = (_CT_HASHTARGET_SZ - 1); i >= 0; i--) {

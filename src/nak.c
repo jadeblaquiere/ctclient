@@ -139,7 +139,7 @@ static void _sscheme_init(void) {
 }
 
 // create, delete, import export for SECRET Key
-void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva) {
+void ctNAKSecretKey_init_Gen(ctNAKSecretKey_t sN, utime_t nvb, utime_t nva) {
     if (_sscheme == NULL) _sscheme_init();
     sN->not_valid_before = nvb;
     sN->not_valid_after = nva;
@@ -150,7 +150,7 @@ void ctNAKSecretKey_init_Gen(ctNAKSecretKey sN, utime_t nvb, utime_t nva) {
     return;
 }
 
-void ctNAKSecretKey_clear(ctNAKSecretKey sN) {
+void ctNAKSecretKey_clear(ctNAKSecretKey_t sN) {
     sN->not_valid_before = 0;
     sN->not_valid_after = 0;
     mpFp_clear(sN->secret_key);
@@ -158,7 +158,7 @@ void ctNAKSecretKey_clear(ctNAKSecretKey sN) {
     return;
 }
 
-unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey sN, size_t *sz) {
+unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey_t sN, size_t *sz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE sN_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -220,7 +220,7 @@ unsigned char *ctNAKSecretKey_export_DER(ctNAKSecretKey sN, size_t *sz) {
     return buffer;
 }
 
-int ctNAKSecretKey_init_import_DER(ctNAKSecretKey sN, unsigned char *der, size_t dsz) {
+int ctNAKSecretKey_init_import_DER(ctNAKSecretKey_t sN, unsigned char *der, size_t dsz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE sN_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -297,7 +297,7 @@ error_cleanup3:
     return -1;
 }
 
-void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN) {
+void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey_t pN, ctNAKSecretKey_t sN) {
     if (_sscheme == NULL) _sscheme_init();
     pN->not_valid_before = sN->not_valid_before;
     pN->not_valid_after = sN->not_valid_after;
@@ -306,14 +306,14 @@ void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey pN, ctNAKSecretKey sN) {
     return;
 }
 
-void ctNAKPublicKey_clear(ctNAKPublicKey pN) {
+void ctNAKPublicKey_clear(ctNAKPublicKey_t pN) {
     pN->not_valid_before = 0;
     pN->not_valid_after = 0;
     mpECP_clear(pN->public_key);
     return;
 }
 
-unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz) {
+unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey_t pN, size_t *sz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE pN_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -381,7 +381,7 @@ unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey pN, size_t *sz) {
     return buffer;
 }
 
-int ctNAKPublicKey_init_import_DER(ctNAKPublicKey pN, unsigned char *der, size_t dsz) {
+int ctNAKPublicKey_init_import_DER(ctNAKPublicKey_t pN, unsigned char *der, size_t dsz) {
     ASN1_TYPE ct_asn1 = ASN1_TYPE_EMPTY;
     ASN1_TYPE pN_asn1 = ASN1_TYPE_EMPTY;
     char asnError[ASN1_MAX_ERROR_DESCRIPTION_SIZE];
@@ -461,12 +461,12 @@ error_cleanup3:
 }
 
 // ECDSA Signatures
-int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey sN, unsigned char *msg, size_t sz) {
+int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey_t sN, unsigned char *msg, size_t sz) {
     if (_sscheme == NULL) _sscheme_init();
     return mpECDSASignature_init_Sign(sig, _sscheme, sN->secret_key, msg, sz);
 }
 
-int ctNAKSignature_verify_cmp(mpECDSASignature_t sig, ctNAKPublicKey pN, unsigned char *msg, size_t sz) {
+int ctNAKSignature_verify_cmp(mpECDSASignature_t sig, ctNAKPublicKey_t pN, unsigned char *msg, size_t sz) {
     return mpECDSASignature_verify_cmp(sig, pN->public_key, msg, sz);
 }
 
@@ -511,8 +511,8 @@ static void _ctNak_mpFp_out_bytes(unsigned char *b, mpFp_t a) {
 }
 
 // signed PUBLIC Key (as present in blockchain xactions)
-unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey sN, size_t *sz) {
-    ctNAKPublicKey pN;
+unsigned char *ctNAKSignedPublicKey_init_ctNAKSecretKey(ctNAKSecretKey_t sN, size_t *sz) {
+    ctNAKPublicKey_t pN;
     mpECDSASignature_t sig;
     unsigned char *buffer;
     unsigned char *b;
@@ -563,7 +563,7 @@ static void _ctNak_mpFp_set_bytes(mpFp_t a, unsigned char *b) {
     return;
 }
 
-int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size_t sz) {
+int ctNAKSignedPublicKey_init_import(ctNAKPublicKey_t pN, unsigned char *bin, size_t sz) {
     unsigned char *b = bin;
     int result;
 
@@ -589,7 +589,7 @@ int ctNAKSignedPublicKey_init_import(ctNAKPublicKey pN, unsigned char *bin, size
 
 int ctNAKSignedPublicKey_validate_cmp(unsigned char *bin, size_t sz) {
     unsigned char *b = bin;
-    ctNAKPublicKey pN;
+    ctNAKPublicKey_t pN;
     mpECDSASignature_t sig;
     int result;
 
@@ -674,7 +674,7 @@ int _mpECElgamal_init_encrypt_deterministic(mpECElgamalCiphertext_t ctxt, mpECP_
 //    utime_t session_expire;
 //} _ctNAKAuthChallenge;
 
-int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt) {
+int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_t *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt) {
     int i;
 
     if (_sscheme == NULL) _sscheme_init();
@@ -958,8 +958,8 @@ error_cleanup3:
     return -1;
 }
 
-int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey sN) {
-    ctNAKPublicKey pN;
+int ctNAKAuthResponse_init(ctNAKAuthResponse_t r, ctNAKAuthChallenge_t c, ctNAKSecretKey_t sN) {
+    ctNAKPublicKey_t pN;
     int i;
 
     if (_sscheme == NULL) _sscheme_init();

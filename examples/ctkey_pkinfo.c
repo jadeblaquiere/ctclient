@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctPublicKey pK;
+    ctPublicKey_t pK;
     unsigned char *der;
     size_t sz;
     int result;

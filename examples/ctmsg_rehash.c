@@ -50,8 +50,8 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctMessage ctM;
-    ctPostageRate pr;
+    ctMessage_t ctM;
+    ctPostageRate_t pr;
     unsigned char *ctext;
     size_t ctsz;
     int status;

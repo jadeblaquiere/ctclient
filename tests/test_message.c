@@ -46,7 +46,7 @@
 // security assumptions related to the encryption code which rely on ECDLP
 // and similar assumptions to be valid (and hence we assume ~256-bit types).
 START_TEST(test_sizes)
-    ctMessage m;
+    ctMessage_t m;
     
     assert(sizeof(m->hdr->magic) == (3U));
     assert(sizeof(m->hdr->version) == (5U));
@@ -68,11 +68,11 @@ START_TEST(test_sizes)
 END_TEST
 
 START_TEST(test_init_clear)
-    ctMessage m;
-    ctSecretKey a_sK;
-    ctSecretKey b_sK;
-    ctPublicKey b_pK;
-    ctPostageRate prate;
+    ctMessage_t m;
+    ctSecretKey_t a_sK;
+    ctSecretKey_t b_sK;
+    ctPublicKey_t b_pK;
+    ctPostageRate_t prate;
     char *msg = "Hello Bob!";
     unsigned char *ctext;
     size_t ctextsz;
@@ -99,11 +99,11 @@ START_TEST(test_init_clear)
 END_TEST
 
 START_TEST(test_encrypt_decrypt)
-    ctMessage m_e, m_d;
-    ctSecretKey a_sK;
-    ctSecretKey b_sK;
-    ctPublicKey b_pK;
-    ctPostageRate prate;
+    ctMessage_t m_e, m_d;
+    ctSecretKey_t a_sK;
+    ctSecretKey_t b_sK;
+    ctPublicKey_t b_pK;
+    ctPostageRate_t prate;
     char *msg = "Hello Bob!";
     unsigned char *ptext;
     size_t ptextsz;

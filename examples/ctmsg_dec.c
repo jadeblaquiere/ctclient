@@ -54,8 +54,8 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctSecretKey sK;
-    ctMessage ctM;
+    ctSecretKey_t sK;
+    ctMessage_t ctM;
     unsigned char *der;
     size_t sz;
     unsigned char *ctext;

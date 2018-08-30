@@ -46,8 +46,8 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctSecretKey sK;
-    ctPublicKey pK;
+    ctSecretKey_t sK;
+    ctPublicKey_t pK;
     unsigned char *der;
     size_t sz;
     int result;

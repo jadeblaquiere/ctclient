@@ -103,47 +103,47 @@ typedef struct {
     unsigned char   header_signature[crypto_sign_BYTES];
     unsigned char   reserved[8];
     uint64_t        nonce;
-} _ctMessageHeader;
+} _ctMessageHeader_t;
 
-typedef _ctMessageHeader ctMessageHeader[1];
-typedef _ctMessageHeader *ctMessageHeader_ptr;
+typedef _ctMessageHeader_t ctMessageHeader_t[1];
+typedef _ctMessageHeader_t *ctMessageHeader_ptr;
 
 typedef struct {
     _ed25519pk      SIG_point;
     uint64_t        msglen;
     uint32_t        mimelen;
     char            mime[_CT_MAX_MIME_LEN];
-} _ctMessageInnerHeader;
+} _ctMessageInnerHeader_t;
 
-typedef _ctMessageInnerHeader ctMessageInnerHeader[1];
-typedef _ctMessageInnerHeader *ctMessageInnerHeader_ptr;
+typedef _ctMessageInnerHeader_t ctMessageInnerHeader_t[1];
+typedef _ctMessageInnerHeader_t *ctMessageInnerHeader_ptr;
 
 typedef struct {
     _ed25519sk      addr_sec;
     _ed25519sk      ephem_sec;
     _ed25519sk      sig_sec;
     unsigned char   sym_key[crypto_stream_xchacha20_KEYBYTES];
-} _ctMessageSecrets;
+} _ctMessageSecrets_t;
 
-typedef _ctMessageSecrets ctMessageSecrets[1];
-typedef _ctMessageSecrets *ctMessageSecrets_ptr;
+typedef _ctMessageSecrets_t ctMessageSecrets_t[1];
+typedef _ctMessageSecrets_t *ctMessageSecrets_ptr;
 
 typedef struct {
-    ctMessageHeader         hdr;
+    ctMessageHeader_t         hdr;
     unsigned char           *fsk;
     uint32_t                fsksz;
     unsigned char           nonce[crypto_aead_xchacha20poly1305_ietf_NPUBBYTES];
-    ctMessageInnerHeader    inner;
+    ctMessageInnerHeader_t    inner;
     size_t                  innersz;
     unsigned char           *ctext;
     size_t                  ctextsz;
     unsigned char           *ptext;
     size_t                  ptextsz;
-    ctMessageSecrets        secrets;
-} _ctMessage;
+    ctMessageSecrets_t        secrets;
+} _ctMessage_t;
 
-typedef _ctMessage  ctMessage[1];
-typedef _ctMessage  *ctMessage_ptr;
+typedef _ctMessage_t  ctMessage_t[1];
+typedef _ctMessage_t  *ctMessage_ptr;
 
 // encrypt a plaintext message for a single recipient toK. toK, plaintext and p_sz
 // are required inputs. If fromK is NULL, a random origination address will be
@@ -152,22 +152,22 @@ typedef _ctMessage  *ctMessage_ptr;
 // the resulting message is signed and stored in msg. if ttl is zero the default
 // ttl (1 week) will be used. If mime is NULL then the default (text/plain) will
 // be used.
-unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
+unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKey_t fromK, 
   int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
-  size_t p_sz, ctPostageRate rate, size_t *sz);
+  size_t p_sz, ctPostageRate_t rate, size_t *sz);
 
 // decrypt an encrypted message (ciphertext) using the key toK. The resulting
 // message structure contains the plaintext along with message metadata. The
 // decrypion process validates the ciphertext and additional data (AEAD). Any
 // error in authentication signature or padding results in msg remaining
 // uninitialized and a nonzero return status.
-int ctMessage_init_Dec(ctMessage msg, ctSecretKey toK, unsigned char *ctext, size_t ctextsz);
+int ctMessage_init_Dec(ctMessage_t msg, ctSecretKey_t toK, unsigned char *ctext, size_t ctextsz);
 
 // clear message and clear/free all allocated data.
-void ctMessage_clear(ctMessage msg);
+void ctMessage_clear(ctMessage_t msg);
 
 // find a nonce which satisfies postage requirement
-int ctMessage_rehash(ctMessage msg, ctPostageRate rate);
+int ctMessage_rehash(ctMessage_t msg, ctPostageRate_t rate);
 
 // NOTE :: for the following convenience routines, the data returned is
 // embedded in other structured data. You should not write to these locations
@@ -175,14 +175,14 @@ int ctMessage_rehash(ctMessage msg, ctPostageRate rate);
 // for the message please call ctMessage_clear())
 
 // return a pointer and length for the message plaintext.
-unsigned char *ctMessage_plaintext_ptr(ctMessage msg, size_t *ptsz);
+unsigned char *ctMessage_plaintext_ptr(ctMessage_t msg, size_t *ptsz);
 
 // return a pointer and length for the message plaintext. The mime type is 
 // null terminated and expected to contain ascii text
-char *ctMessage_mime_ptr(ctMessage msg, size_t *mimesz);
+char *ctMessage_mime_ptr(ctMessage_t msg, size_t *mimesz);
 
 // return a pointer and length for the message plaintext. 
-unsigned char *ctMessage_ciphertext_ptr(ctMessage msg, size_t *ctsz);
+unsigned char *ctMessage_ciphertext_ptr(ctMessage_t msg, size_t *ctsz);
 
 #ifdef __cplusplus
 }

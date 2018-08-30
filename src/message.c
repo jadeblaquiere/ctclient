@@ -65,7 +65,7 @@ static char *_ct_msg_default_mime = "text/plain";
 // minimum message time-to-live - 2x default (2 weeks)
 #define _CT_MAXIMUM_MSG_TTL (2*_CT_DEFAULT_MSG_TTL)
 
-static unsigned char *_ctMessage_compose_preamble(ctMessage msg, size_t *psz) {
+static unsigned char *_ctMessage_compose_preamble(ctMessage_t msg, size_t *psz) {
     uint32_t fsksz;
     unsigned char *preamble;
     size_t preamblesz;
@@ -80,8 +80,8 @@ static unsigned char *_ctMessage_compose_preamble(ctMessage msg, size_t *psz) {
     return preamble;
 }
 
-static unsigned char *_ctMessage_compose_auth_data(ctMessage msg, size_t *asz) {
-    ctMessageHeader hdr;
+static unsigned char *_ctMessage_compose_auth_data(ctMessage_t msg, size_t *asz) {
+    ctMessageHeader_t hdr;
     unsigned char *preamble, *adata;
     size_t preamblesz, adatasz;
     
@@ -102,9 +102,9 @@ static unsigned char *_ctMessage_compose_auth_data(ctMessage msg, size_t *asz) {
     return adata;
 }
 
-unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fromK, 
+unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKey_t fromK, 
   int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
-  size_t p_sz, ctPostageRate rate, size_t *sz) {
+  size_t p_sz, ctPostageRate_t rate, size_t *sz) {
     element_t       random_e;
     _ed25519pk      ephem_ecdh;
     int             status;
@@ -274,7 +274,7 @@ unsigned char *ctMessage_init_Enc(ctMessage msg, ctPublicKey toK, ctSecretKey fr
 
     // symmetric encryption
     {
-        ctMessageInnerHeader inner;
+        ctMessageInnerHeader_t inner;
         unsigned char *ptext;
         unsigned char *adata;
         unsigned char *pad;
@@ -380,8 +380,8 @@ error_cleanup1:
     return NULL;
 }
 
-int ctMessage_init_Dec(ctMessage msg, ctSecretKey toK, unsigned char *ctext, size_t ctextsz) {
-    ctMessageHeader thdr;
+int ctMessage_init_Dec(ctMessage_t msg, ctSecretKey_t toK, unsigned char *ctext, size_t ctextsz) {
+    ctMessageHeader_t thdr;
     _ed25519pk addr_point;
     _ed25519pk ephem_ecdh;
     unsigned char payload_hash[crypto_generichash_BYTES];
@@ -571,7 +571,7 @@ error_cleanup1:
     return -1;
 }
 
-void ctMessage_clear(ctMessage msg) {
+void ctMessage_clear(ctMessage_t msg) {
     memset(msg->ptext, 0, msg->ptextsz);
     memset(msg->ctext, 0, msg->ctextsz);
     memset(msg->fsk, 0, msg->fsksz);
@@ -581,9 +581,9 @@ void ctMessage_clear(ctMessage msg) {
     memset(msg, 0, sizeof(msg));
 }
 
-int ctMessage_rehash(ctMessage msg, ctPostageRate rate) {
-    ctPostageHash ptgt;
-    ctPostageHash hash;
+int ctMessage_rehash(ctMessage_t msg, ctPostageRate_t rate) {
+    ctPostageHash_t ptgt;
+    ctPostageHash_t hash;
     int status;
 
     status = ctPostage_hash_target(ptgt, rate, msg->hdr->payload_blocks + 1);
@@ -598,20 +598,20 @@ int ctMessage_rehash(ctMessage msg, ctPostageRate rate) {
 }
 
 // return a pointer and length for the message plaintext.
-unsigned char *ctMessage_plaintext_ptr(ctMessage msg, size_t *ptsz) {
+unsigned char *ctMessage_plaintext_ptr(ctMessage_t msg, size_t *ptsz) {
     *ptsz = msg->inner->msglen;
     return msg->ptext + msg->innersz;
 }
 
 // return a pointer and length for the message plaintext. The mime type is 
 // null terminated and expected to contain ascii text
-char *ctMessage_mime_ptr(ctMessage msg, size_t *mimesz) {
+char *ctMessage_mime_ptr(ctMessage_t msg, size_t *mimesz) {
     *mimesz = msg->inner->mimelen;
     return msg->inner->mime;
 }
 
 // return a pointer and length for the message plaintext. 
-unsigned char *ctMessage_ciphertext_ptr(ctMessage msg, size_t *ctsz) {
+unsigned char *ctMessage_ciphertext_ptr(ctMessage_t msg, size_t *ctsz) {
     *ctsz = msg->ctextsz;
     return msg->ctext;
 }

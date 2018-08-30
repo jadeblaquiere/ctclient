@@ -53,10 +53,10 @@ typedef struct {
     utime_t         tStep;
     int64_t         _intervalMin;
     int64_t         _intervalMax;
-} _ctSecretKey;
+} _ctSecretKey_t;
 
-typedef _ctSecretKey ctSecretKey[1];
-typedef _ctSecretKey *ctSecretKey_ptr;
+typedef _ctSecretKey_t ctSecretKey_t[1];
+typedef _ctSecretKey_t *ctSecretKey_ptr;
 
 typedef struct {
     _ed25519pk      addr_pub;
@@ -65,45 +65,45 @@ typedef struct {
     CHKPKE_t        chk_pub;
     utime_t         t0;
     utime_t         tStep;
-} _ctPublicKey;
+} _ctPublicKey_t;
 
-typedef _ctPublicKey ctPublicKey[1];
-typedef _ctPublicKey *ctPublicKey_ptr;
+typedef _ctPublicKey_t ctPublicKey_t[1];
+typedef _ctPublicKey_t *ctPublicKey_ptr;
 
-void ctSecretKey_init_Gen(ctSecretKey sK, int qbits, int rbits, int depth, int order, int64_t tStep);
-void ctSecretKey_clear(ctSecretKey sK);
+void ctSecretKey_init_Gen(ctSecretKey_t sK, int qbits, int rbits, int depth, int order, int64_t tStep);
+void ctSecretKey_clear(ctSecretKey_t sK);
 
 // export a binary (ASN.1 DER Encoded) representation of the secret key
 // valid for time including tStart and after (cannot decode older messages)
-unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey sK, utime_t tStart, size_t *sz);
+unsigned char *ctSecretKey_Export_FS_DER(ctSecretKey_t sK, utime_t tStart, size_t *sz);
 
 // export a key which is valid for time interval [tStart, tEnd] (inclusive of limits)
 // returns NULL on error (i.e. if tStart, tEnd are outside capabilities of key)
 // the intent of this API is to support producing "delegate" keys which are only valid
 // for a short interval. Therefore if the device with that key is compromised the
 // risk exposure is limited both forward and backwards in time.
-unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey sK, utime_t tStart, utime_t tEnd, size_t *sz);
+unsigned char *ctSecretKey_Export_FS_Delegate_DER(ctSecretKey_t sK, utime_t tStart, utime_t tEnd, size_t *sz);
 
 // import (decode) a DER key as a secret key
-int ctSecretKey_init_decode_DER(ctSecretKey sK, unsigned char *der, size_t dsz);
+int ctSecretKey_init_decode_DER(ctSecretKey_t sK, unsigned char *der, size_t dsz);
 
 // initialize a public key from a secret key
-void ctPublicKey_init_ctSecretKey(ctPublicKey pK, ctSecretKey sK);
-void ctPublicKey_clear(ctPublicKey pK);
+void ctPublicKey_init_ctSecretKey(ctPublicKey_t pK, ctSecretKey_t sK);
+void ctPublicKey_clear(ctPublicKey_t pK);
 
 // export a binary (ASN.1 DER Encoded) representation of the public key
 // public keys are valid for all time periods (though clearly encoding 
 // messages for times in the past is of questionable value)
-unsigned char *ctPublicKey_Export_DER(ctPublicKey pK, size_t *sz);
+unsigned char *ctPublicKey_Export_DER(ctPublicKey_t pK, size_t *sz);
 
 // import (decode) a DER key as a public key
-int ctPublicKey_init_decode_DER(ctPublicKey pK, unsigned char *der, size_t dsz);
+int ctPublicKey_init_decode_DER(ctPublicKey_t pK, unsigned char *der, size_t dsz);
 
 // internal libary routines for handling time/interval conversion
-int64_t _ctSecretKey_interval_for_time(ctSecretKey sK, utime_t t);
-utime_t _ctSecretKey_time_for_interval(ctSecretKey sK, int64_t i);
-int64_t _ctPublicKey_interval_for_time(ctPublicKey pK, utime_t t);
-utime_t _ctPublicKey_time_for_interval(ctPublicKey pK, int64_t i);
+int64_t _ctSecretKey_interval_for_time(ctSecretKey_t sK, utime_t t);
+utime_t _ctSecretKey_time_for_interval(ctSecretKey_t sK, int64_t i);
+int64_t _ctPublicKey_interval_for_time(ctPublicKey_t pK, utime_t t);
+utime_t _ctPublicKey_time_for_interval(ctPublicKey_t pK, int64_t i);
 
 #ifdef __cplusplus
 }

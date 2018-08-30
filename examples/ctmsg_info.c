@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         POPT_AUTOHELP
         {NULL}
     };
-    ctMessageHeader ctMH;
+    ctMessageHeader_t ctMH;
     unsigned char *ctext;
     size_t ctsz;
     char buffer[256];
