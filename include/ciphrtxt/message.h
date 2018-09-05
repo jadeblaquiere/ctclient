@@ -33,6 +33,7 @@
 
 #include <ciphrtxt/keys.h>
 #include <ciphrtxt/postage.h>
+#include <ciphrtxt/utime.h>
 #include <fspke.h>
 #include <sodium.h>
 
@@ -153,7 +154,7 @@ typedef _ctMessage_t  *ctMessage_ptr;
 // ttl (1 week) will be used. If mime is NULL then the default (text/plain) will
 // be used.
 unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKey_t fromK, 
-  int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
+  utime_t timestamp, utime_t ttl, char *mime, unsigned char *plaintext,
   size_t p_sz, ctPostageRate_t rate, size_t *sz);
 
 // decrypt an encrypted message (ciphertext) using the key toK. The resulting

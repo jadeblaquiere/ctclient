@@ -32,6 +32,7 @@
 #include <ciphrtxt/keys.h>
 #include <ciphrtxt/message.h>
 #include <ciphrtxt/postage.h>
+#include <ciphrtxt/utime.h>
 #include <fspke.h>
 #include <inttypes.h>
 #include <libtasn1.h>
@@ -103,7 +104,7 @@ static unsigned char *_ctMessage_compose_auth_data(ctMessage_t msg, size_t *asz)
 }
 
 unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKey_t fromK, 
-  int64_t timestamp, int64_t ttl, char *mime, unsigned char *plaintext,
+  utime_t timestamp, utime_t ttl, char *mime, unsigned char *plaintext,
   size_t p_sz, ctPostageRate_t rate, size_t *sz) {
     element_t       random_e;
     _ed25519pk      ephem_ecdh;
@@ -310,7 +311,7 @@ unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKe
             ptext, (unsigned long long)(ptextsz),
             adata, (unsigned long long)adatasz, NULL, msg->nonce, msg->secrets->sym_key);
         assert(clen == (ciphersz));
-        msg->ctextsz = (size_t)clen;
+        //msg->ctextsz = (size_t)clen;
 
         // Copy preamble into encoded ciphertext message
         memcpy(msg->ctext + _CT_BLKSZ, adata + _CT_AUTH_HDR_SZ, preamblesz);
@@ -325,7 +326,7 @@ unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKe
         }
 
         // Calculate hash of payload (authenticated preamble + ciphertext)
-        crypto_generichash(msg->hdr->payload_hash, sizeof(msg->hdr->payload_hash), msg->ctext + _CT_BLKSZ, preamblesz + msg->ctextsz, NULL, 0);
+        crypto_generichash(msg->hdr->payload_hash, sizeof(msg->hdr->payload_hash), msg->ctext + _CT_BLKSZ, preamblesz + clen, NULL, 0);
     }
 
     // reserved data
@@ -603,7 +604,7 @@ unsigned char *ctMessage_plaintext_ptr(ctMessage_t msg, size_t *ptsz) {
     return msg->ptext + msg->innersz;
 }
 
-// return a pointer and length for the message plaintext. The mime type is 
+// return a pointer and length for the message mime type. The mime type is 
 // null terminated and expected to contain ascii text
 char *ctMessage_mime_ptr(ctMessage_t msg, size_t *mimesz) {
     *mimesz = msg->inner->mimelen;

@@ -77,21 +77,30 @@ import (
 	"unsafe"
 )
 
-// Max size of Fp values is based on _MPFP_MAX_LIMBS * sizeof(mp_limb_t)
-const _MPFP_Max_Bytes = (32 * 8)
-
 func init() {
 	C._enable_gmp_safe_clean()
 }
 
+// SecretKey is a composite key containing individual secret keys for anonymous
+// addressing, signing and encryption. The encryption keys include a forward
+// secure component which enables the keyholder to update the secret key
+// such that past messages can no longer be decrypted.
 type SecretKey struct {
 	sK *C._ctSecretKey_t
 }
 
+// PublicKey is a composite key containing individual public keys for anonymous
+// authentication, signing and encryption.
 type PublicKey struct {
 	pK *C._ctPublicKey_t
 }
 
+// NewSecretKey creates a new (random) secret key. The values for qbits, rbits
+// determine the field size and the prime order of the underlying curves. Depth
+// and order determine the number of key intervals (the implementation uses a
+// btree so the number of intervals is order**depth). tStep determines the
+// resolution of forward secrecy. Supplying a zero value for any input will
+// select the default values (512, 384, 6, 16, 60 Seconds, respectively)
 func NewSecretKey(qbits, rbits, depth, order int, tStep time.Duration) (z *SecretKey) {
 
 	z = new(SecretKey)
