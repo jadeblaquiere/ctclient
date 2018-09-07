@@ -77,6 +77,10 @@ func TestExportImportSecretKey(t *testing.T) {
 	fmt.Println("SecretKey = ", hex.EncodeToString(sKder))
 
 	sK2 := ImportSecretKey(sKder)
+	if sK2 == nil {
+		fmt.Println("Error importing SecretKey")
+		t.FailNow()
+	}
 
 	sK2der, err := sK2.Export(nvbt)
 	if err != nil {

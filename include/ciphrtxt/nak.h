@@ -42,7 +42,7 @@ extern "C" {
 
 typedef struct {
     mpFp_t  secret_key;
-    mpFp_t  secret_key_inv;
+    //mpFp_t  secret_key_inv;
     utime_t not_valid_before;
     utime_t not_valid_after;
 } _ctNAKSecretKey_t;

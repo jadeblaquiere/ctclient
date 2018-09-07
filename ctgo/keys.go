@@ -34,7 +34,6 @@ package ctgo
 // #cgo LDFLAGS: -lecc -lgmp
 // #include <ciphrtxt/keys.h>
 // #include <ciphrtxt/utime.h>
-// #include <gmp.h>
 // #include <stdlib.h>
 //
 // ctSecretKey_ptr malloc_ctSecretKey() {
@@ -120,7 +119,8 @@ func secretKey_clear(z *SecretKey) {
 // decrypt messages for the specified time and later (older messages cannot
 // be decrypted as the key implements forward secrecy). If the Secret Key is
 // newer that the time t then an error is returned as it is not possible to
-// derive keys "from the past".
+// derive keys "from the past". The key is serialized using (binary) ASN.1 DER
+// encoding.
 func (z *SecretKey) Export(t time.Time) (key []byte, err error) {
 	//var pke *C._CHKPKE_t
 	var der *C.uchar
@@ -137,7 +137,8 @@ func (z *SecretKey) Export(t time.Time) (key []byte, err error) {
 
 // ExportDelegate serializes a binary representation of the key which is able to
 // decrypt messages for the specified window of time (only messages from the
-// period between notBefore and notAfter can be decrypted).
+// period between notBefore and notAfter can be decrypted). The key is
+// serialized using (binary) ASN.1 DER encoding.
 func (z *SecretKey) ExportDelegate(notBefore, notAfter time.Time) (key []byte, err error) {
 	//var pke *C._CHKPKE_t
 	var der *C.uchar

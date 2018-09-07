@@ -36,7 +36,6 @@ package ctgo
 // #include <ciphrtxt/message.h>
 // #include <ciphrtxt/postage.h>
 // #include <ciphrtxt/utime.h>
-// #include <gmp.h>
 // #include <stdlib.h>
 //
 // ctMessage_ptr malloc_ctMessage() {

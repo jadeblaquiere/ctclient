@@ -145,8 +145,8 @@ void ctNAKSecretKey_init_Gen(ctNAKSecretKey_t sN, utime_t nvb, utime_t nva) {
     sN->not_valid_after = nva;
     mpFp_init(sN->secret_key, _sscheme->cvp->n);
     mpFp_urandom(sN->secret_key, _sscheme->cvp->n);
-    mpFp_init(sN->secret_key_inv, _sscheme->cvp->n);
-    mpFp_inv(sN->secret_key_inv, sN->secret_key);
+    //mpFp_init(sN->secret_key_inv, _sscheme->cvp->n);
+    //mpFp_inv(sN->secret_key_inv, sN->secret_key);
     return;
 }
 
@@ -154,7 +154,7 @@ void ctNAKSecretKey_clear(ctNAKSecretKey_t sN) {
     sN->not_valid_before = 0;
     sN->not_valid_after = 0;
     mpFp_clear(sN->secret_key);
-    mpFp_clear(sN->secret_key_inv);
+    //mpFp_clear(sN->secret_key_inv);
     return;
 }
 
@@ -268,8 +268,8 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey_t sN, unsigned char *der, size
         goto error_cleanup2;
     }
     mpFp_set_mpz(sN->secret_key, tmpz, _sscheme->cvp->n);
-    mpFp_init(sN->secret_key_inv, _sscheme->cvp->n);
-    mpFp_inv(sN->secret_key_inv, sN->secret_key);
+    //mpFp_init(sN->secret_key_inv, _sscheme->cvp->n);
+    //mpFp_inv(sN->secret_key_inv, sN->secret_key);
     mpz_clear(tmpz);
 
     status = _asn1_read_int64_from_integer(&(sN->not_valid_before), sN_asn1, "not_before");
@@ -283,7 +283,7 @@ int ctNAKSecretKey_init_import_DER(ctNAKSecretKey_t sN, unsigned char *der, size
     return 0;
 
 error_cleanup2:
-    mpFp_clear(sN->secret_key_inv);
+    //mpFp_clear(sN->secret_key_inv);
     mpFp_clear(sN->secret_key);
     sN->not_valid_before = 0;
     sN->not_valid_after = 0;
@@ -631,7 +631,7 @@ int _mpECElgamal_init_encrypt_deterministic(mpECElgamalCiphertext_t ctxt, mpECP_
     }
     mpFp_init(k, pK->cvp->n);
 
-    // for uniform hashing, H() = CWHash(SHA512(pKx || pKy || pTx || pTy))
+    // for uniform hashing, H() = CWHash(SHA512(pKx || pKy || ptxtx || ptxty))
     {
         unsigned char shash[crypto_hash_sha512_BYTES];
         unsigned char pKpT[(secp256k1_uncompressed_BYTES * 2)];
@@ -640,7 +640,7 @@ int _mpECElgamal_init_encrypt_deterministic(mpECElgamalCiphertext_t ctxt, mpECP_
 
         assert(mpECP_out_bytelen(pK, 0) == secp256k1_uncompressed_BYTES);
         mpECP_out_bytes(pKpT, pK, 0);
-        mpECP_out_bytes(pKpT + secp256k1_uncompressed_BYTES, pK, 0);
+        mpECP_out_bytes(pKpT + secp256k1_uncompressed_BYTES, ptxt, 0);
         status = crypto_hash_sha512(shash, pKpT, secp256k1_uncompressed_BYTES * 2);
         assert(status == 0);
         mpz_init(t);
