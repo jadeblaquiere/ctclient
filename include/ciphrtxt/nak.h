@@ -70,6 +70,7 @@ void ctNAKPublicKey_init_ctNAKSecretKey(ctNAKPublicKey_t pN, ctNAKSecretKey_t sN
 void ctNAKPublicKey_clear(ctNAKPublicKey_t pN);
 unsigned char *ctNAKPublicKey_export_DER(ctNAKPublicKey_t pN, size_t *sz);
 int ctNAKPublicKey_init_import_DER(ctNAKPublicKey_t pN, unsigned char *der, size_t sz);
+void ctNAKPublicKey_init_set(ctNAKPublicKey_t rop, ctNAKPublicKey_t op);
 
 // ECDSA Signatures
 int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey_t sN, unsigned char *msg, size_t sz);
@@ -109,7 +110,7 @@ typedef struct {
 typedef _ctNAKAuthChallenge_t ctNAKAuthChallenge_t[1];
 typedef _ctNAKAuthChallenge_t *ctNAKAuthChallenge_ptr;
 
-int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_t *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt);
+int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_ptr pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt);
 unsigned char *ctNAKAuthChallenge_export_DER(ctNAKAuthChallenge_t c, size_t *sz);
 int ctNAKAuthChallenge_init_import_DER(ctNAKAuthChallenge_t c, unsigned char *der, size_t sz);
 void ctNAKAuthChallenge_clear(ctNAKAuthChallenge_t c);

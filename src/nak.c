@@ -460,6 +460,14 @@ error_cleanup3:
     return -1;
 }
 
+void ctNAKPublicKey_init_set(ctNAKPublicKey_t rop, ctNAKPublicKey_t op) {
+    mpECP_init(rop->public_key, op->public_key->cvp);
+    mpECP_set(rop->public_key, op->public_key);
+    rop->not_valid_before = op->not_valid_before;
+    rop->not_valid_after = op->not_valid_after;
+    return;
+}
+
 // ECDSA Signatures
 int ctNAKSignature_init_Sign(mpECDSASignature_t sig, ctNAKSecretKey_t sN, unsigned char *msg, size_t sz) {
     if (_sscheme == NULL) _sscheme_init();
@@ -674,7 +682,7 @@ int _mpECElgamal_init_encrypt_deterministic(mpECElgamalCiphertext_t ctxt, mpECP_
 //    utime_t session_expire;
 //} _ctNAKAuthChallenge;
 
-int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_t *pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt) {
+int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_ptr pN, mpECP_t session_pK, utime_t expire, mpECP_t ptxt) {
     int i;
 
     if (_sscheme == NULL) _sscheme_init();
@@ -685,8 +693,8 @@ int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_t *pN,
     }
     // validate curve of pK[i], ensure session_pK not in set
     for (i = 0; i < n; i++) {
-        if ((mpECurve_cmp(pN[i]->public_key->cvp, session_pK->cvp) != 0) || 
-            (mpECP_cmp(pN[i]->public_key, session_pK) == 0)) {
+        if ((mpECurve_cmp(pN[i].public_key->cvp, session_pK->cvp) != 0) || 
+            (mpECP_cmp(pN[i].public_key, session_pK) == 0)) {
             return -1;
         }
     }
@@ -700,7 +708,7 @@ int ctNAKAuthChallenge_init(ctNAKAuthChallenge_t c, int n, ctNAKPublicKey_t *pN,
         int status;
 
         mpECP_init(c->pK[i], _curve);
-        mpECP_set(c->pK[i], pN[i]->public_key);
+        mpECP_set(c->pK[i], pN[i].public_key);
         status = _mpECElgamal_init_encrypt_deterministic(c->ctxt[i], c->pK[i], ptxt);
         if (status != 0) {
             mpECP_clear(c->pK[i]);

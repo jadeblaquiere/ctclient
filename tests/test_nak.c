@@ -168,8 +168,9 @@ START_TEST(test_auth_challenge)
     utime_t not_valid_before;
     utime_t not_valid_after;
     utime_t session_expire;
-    ctNAKSecretKey_t *c_sN;
-    ctNAKPublicKey_t *c_pN;
+    ctNAKSecretKey_ptr c_sN;
+    ctNAKPublicKey_ptr c_pN;
+    ctNAKPublicKey_ptr c_pN_cp;
     int n = 50;
     int i;
     int status;
@@ -191,12 +192,21 @@ START_TEST(test_auth_challenge)
     mpECP_init(session_pK, cvp);
     mpECP_scalar_mul(session_pK, Gpt, session_sK);
 
-    c_sN = (ctNAKSecretKey_t *)malloc(n * sizeof(ctNAKSecretKey_t));
-    c_pN = (ctNAKPublicKey_t *)malloc(n * sizeof(ctNAKPublicKey_t));
+    c_sN = (ctNAKSecretKey_ptr)malloc(n * sizeof(_ctNAKSecretKey_t));
+    c_pN = (ctNAKPublicKey_ptr)malloc(n * sizeof(_ctNAKPublicKey_t));
 
     for (i = 0; i < n; i++) {
-        ctNAKSecretKey_init_Gen(c_sN[i], not_valid_before, not_valid_after);
-        ctNAKPublicKey_init_ctNAKSecretKey(c_pN[i], c_sN[i]);
+        ctNAKSecretKey_init_Gen(&(c_sN[i]), not_valid_before, not_valid_after);
+        ctNAKPublicKey_init_ctNAKSecretKey(&(c_pN[i]), &(c_sN[i]));
+    }
+
+    c_pN_cp = (ctNAKPublicKey_ptr)malloc(n * sizeof(_ctNAKPublicKey_t));
+
+    for (i = 0; i < n; i++) {
+        ctNAKPublicKey_init_set(&(c_pN_cp[i]), &(c_pN[i]));
+        assert(mpECP_cmp(c_pN[i].public_key, c_pN_cp[i].public_key) == 0);
+        assert(c_pN[i].not_valid_before == c_pN_cp[i].not_valid_before);
+        assert(c_pN[i].not_valid_after == c_pN_cp[i].not_valid_after);
     }
 
     session_expire = getutime() + (1 * UTIME_HOURS);
@@ -204,7 +214,7 @@ START_TEST(test_auth_challenge)
     mpECP_init(r_ptxt, cvp);
     mpECP_urandom(r_ptxt, cvp);
 
-    status = ctNAKAuthChallenge_init(ch, n, c_pN, session_pK, session_expire, r_ptxt);
+    status = ctNAKAuthChallenge_init(ch, n, c_pN_cp, session_pK, session_expire, r_ptxt);
     assert(status == 0);
 
     buffer = ctNAKAuthChallenge_export_DER(ch, &bsz);
@@ -234,7 +244,7 @@ START_TEST(test_auth_challenge)
     for (i = 0; i < n; i++) {
         ctNAKAuthResponse_t rs_cp;
 
-        status = ctNAKAuthResponse_init(rs, ch, c_sN[i]);
+        status = ctNAKAuthResponse_init(rs, ch, &(c_sN[i]));
         assert(status == 0);
         
         buffer = ctNAKAuthResponse_export_DER(rs, &bsz);
@@ -266,8 +276,9 @@ START_TEST(test_auth_challenge)
 
     ctNAKAuthChallenge_clear(ch);
     for (i = 0; i < n; i++) {
-        ctNAKPublicKey_clear(c_pN[i]);
-        ctNAKSecretKey_clear(c_sN[i]);
+        ctNAKPublicKey_clear(&(c_pN_cp[i]));
+        ctNAKPublicKey_clear(&(c_pN[i]));
+        ctNAKSecretKey_clear(&(c_sN[i]));
     }
     free(c_pN);
     free(c_sN);
