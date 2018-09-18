@@ -579,7 +579,7 @@ void ctMessage_clear(ctMessage_t msg) {
     free(msg->ctext);
     free(msg->ptext);
     free(msg->fsk);
-    memset(msg, 0, sizeof(msg));
+    memset(msg, 0, sizeof(msg[0]));
 }
 
 int ctMessage_rehash(ctMessage_t msg, ctPostageRate_t rate) {
