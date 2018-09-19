@@ -33,6 +33,7 @@
 #include <gmp.h>
 #include <inttypes.h>
 #include <libtasn1.h>
+#include <portable_endian.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -55,39 +56,15 @@ int _asn1_write_uchar_string_as_octet_string(asn1_node root, char *attribute, un
 }
 
 int _asn1_write_int64_as_integer(asn1_node root, char *attribute, int64_t value) {
-    int nbytes;
+    int nbytes = 256;
     int result;
-    char *buffer;
-    if (value < 0) {
-        if (value > (-((1ll << 7 ) - 1))) {
-            nbytes = 1;
-        } else if (value > (-((1ll << 15) - 1))) {
-            nbytes = 2;
-        } else if (value > (-((1ll << 31) - 1))) {
-            nbytes = 4;
-        } else {
-            nbytes = 8;
-        }
-    } else {
-        if (value < (1 << 7)) {
-            nbytes = 1;
-        } else if (value < (1ll << 15)) {
-            nbytes = 2;
-        } else if (value < (1ll << 31)) {
-            nbytes = 4;
-        } else {
-            nbytes = 8;
-        }
-    }
-    buffer = (char *)malloc((nbytes + 2) * sizeof(char));
-    assert(buffer != NULL);
+    char buffer[256];
     sprintf(buffer,"%" PRId64, value);
     //printf("writing %ld (%s), length %d to %s\n", value, buffer, nbytes, attribute);
     result = asn1_write_value(root, attribute, buffer, 0);
     //printf("returned %d\n", result);
     assert(result == ASN1_SUCCESS);
     memset((void *)buffer, 0, nbytes);
-    free(buffer);
     return 5 + nbytes;
 }
 

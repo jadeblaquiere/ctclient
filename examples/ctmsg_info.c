@@ -34,6 +34,7 @@
 #include <ciphrtxt.h>
 #include <limits.h>
 #include <popt.h>
+#include <portable_endian.h>
 #include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>

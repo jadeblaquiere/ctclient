@@ -28,14 +28,49 @@
 //OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define _XOPEN_SOURCE
+#ifndef _BSD_SOURCE
+#define _BSD_SOURCE  1
+#define _REVERT_BSD_SOURCE
+#endif
+
+#ifndef _SVID_SOURCE
+#define _SVID_SOURCE  1
+#define _REVERT_SVID_SOURCE
+#endif
+
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE   1
+#define _REVERT_XOPEN_SOURCE    1
+#endif
+
 #include <time.h>
+
+#ifdef _REVERT_XOPEN_SOURCE
+#undef _REVERT_XOPEN_SOURCE
+#undef _XOPEN_SOURCE
+#endif
+
+#ifdef _REVERT_SVID_SOURCE
+#undef _REVERT_SVID_SOURCE
+#undef _SVID_SOURCE
+#endif
+
+#ifdef _REVERT_BSD_SOURCE
+#undef _REVERT_BSD_SOURCE
+#undef _BSD_SOURCE
+#endif
+
+#ifndef __USE_ISOC99
+#define __USE_ISOC99    1
+#include <stdio.h>
+#undef __USE_ISOC99
+#else
+#include <stdio.h>
+#endif
 
 #include <assert.h>
 #include <ciphrtxt/utime.h>
 #include <inttypes.h>
-#define __USE_ISOC99
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -60,7 +95,7 @@ void timeval_from_utime(struct timeval *tv, utime_t utm) {
 utime_t utime_from_tm(struct tm *tm) {
     time_t tt;
 
-    tt = mktime(tm);
+    tt = timegm(tm);
     assert(tt != -1);
     return (1000000) * ((int64_t)tt);
 }

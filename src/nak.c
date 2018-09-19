@@ -943,6 +943,8 @@ int ctNAKAuthChallenge_init_import_DER(ctNAKAuthChallenge_t c, unsigned char *de
     }
 
     c->n = n;
+    asn1_delete_structure(&nach_asn1);
+    asn1_delete_structure(&ct_asn1);
     return 0;
 
 error_cleanup1:
@@ -1198,6 +1200,8 @@ int ctNAKAuthResponse_init_import_DER(ctNAKAuthResponse_t r, unsigned char *der,
     memset((void *)buffer, 0, sz);
     free(buffer);
 
+    asn1_delete_structure(&nar_asn1);
+    asn1_delete_structure(&ct_asn1);
     return 0;
 
 error_cleanup0:

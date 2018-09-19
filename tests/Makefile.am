@@ -1,5 +1,6 @@
-noinst_PROGRAMS = test_keys test_message test_postage test_utime test_nak
 TESTS = test_keys test_message test_postage test_utime test_nak
+MTESTS = mtest_nak
+noinst_PROGRAMS = $(TESTS) $(MTESTS)
 
 test_keys_SOURCES = test_keys.c
 test_keys_CFLAGS = -Wall -I ../include $(CFLAGS) -I $(prefix)/include/pbc $(CHECK_CFLAGS)
@@ -20,3 +21,7 @@ test_utime_LDADD = -L../src/.libs/ -lciphrtxt -ltasn1 $(LDFLAGS) $(CHECK_LIBS)
 test_nak_SOURCES = test_nak.c
 test_nak_CFLAGS = -Wall -I ../include $(CFLAGS) -I $(prefix)/include/pbc $(CHECK_CFLAGS)
 test_nak_LDADD = -L../src/.libs/ -lciphrtxt -ltasn1 $(LDFLAGS) $(CHECK_LIBS)
+
+mtest_nak_SOURCES = mtest_nak.c
+mtest_nak_CFLAGS = -Wall -I ../include $(CFLAGS) -I $(prefix)/include/pbc $(CHECK_CFLAGS)
+mtest_nak_LDADD = -L../src/.libs/ -lciphrtxt -ltasn1 $(LDFLAGS) $(CHECK_LIBS)
