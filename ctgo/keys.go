@@ -37,7 +37,7 @@ package ctgo
 // #include <stdlib.h>
 //
 // ctSecretKey_ptr malloc_ctSecretKey() {
-//     return (ctSecretKey_ptr)malloc(sizeof(ctSecretKey_t));
+//     return (ctSecretKey_ptr)malloc(sizeof(_ctSecretKey_t));
 // }
 //
 // void free_ctSecretKey(ctSecretKey_ptr e) {
@@ -45,7 +45,7 @@ package ctgo
 // }
 //
 // ctPublicKey_ptr malloc_ctPublicKey() {
-//     return (ctPublicKey_ptr)malloc(sizeof(ctPublicKey_t));
+//     return (ctPublicKey_ptr)malloc(sizeof(_ctPublicKey_t));
 // }
 //
 // void free_ctPublicKey(ctPublicKey_ptr e) {

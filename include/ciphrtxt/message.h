@@ -94,8 +94,8 @@ extern "C" {
 typedef struct {
     char            magic[_CT_MAGIC_BYTES];
     unsigned char   version[_CT_VERSION_BYTES];
-    uint64_t        msgtime_usec;
-    uint64_t        expire_usec;
+    utime_t        msgtime_usec;
+    utime_t        expire_usec;
     uint64_t        payload_blocks;
     _ed25519pk      I_point;
     _ed25519pk      J_point;

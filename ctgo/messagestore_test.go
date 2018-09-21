@@ -34,11 +34,12 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
 
-func TestEncryptDecryptMessage(t *testing.T) {
+func TestWriteMessage(t *testing.T) {
 	sKA := NewSecretKey(0, 0, 0, 0, 0)
 	sKB := NewSecretKey(0, 0, 0, 0, 0)
 	pKA := sKA.PublicKey()
@@ -55,14 +56,51 @@ func TestEncryptDecryptMessage(t *testing.T) {
 		t.FailNow()
 	}
 
-	ctext := ctmsg.Ciphertext()
-	if ctext == nil {
-		fmt.Println("Ctext output is nil!")
+	tfilename := hex.EncodeToString(ctmsg.PayloadHash())
+	mf, err := ctmsg.WriteToFile(tfilename)
+	if err != nil {
+		fmt.Println("Error writing temp file!")
 		t.FailNow()
 	}
-	fmt.Println("encrypted (", len(ctext), " bytes) = ", hex.EncodeToString(ctext))
+	defer os.Remove(tfilename)
 
-	ctmsgcp := DecryptMessage(sKA, ctext)
+	if mf.isSizeValid() != true {
+		fmt.Println("mf size mismatch!")
+		t.FailNow()
+	}
+
+	mf2, err := NewMessageFile(tfilename)
+	if err != nil {
+		fmt.Println("Error reading temp file!")
+		t.FailNow()
+	}
+
+	if mf2.isSizeValid() != true {
+		fmt.Println("mf2 size mismatch!")
+		t.FailNow()
+	}
+
+	if mf.MessageTime().Sub(mf2.MessageTime()) != 0 {
+		fmt.Println("MessageTime mismatch!")
+		t.FailNow()
+	}
+
+	if mf.ExpireTime().Sub(mf2.ExpireTime()) != 0 {
+		fmt.Println("ExpireTime mismatch!")
+		t.FailNow()
+	}
+
+	if mf.PayloadBlocks() != mf2.PayloadBlocks() {
+		fmt.Println("PayloadBlocks mismatch!")
+		t.FailNow()
+	}
+
+	if bytes.Compare(mf.PayloadHash(), mf2.PayloadHash()) != 0 {
+		fmt.Println("PayloadHash mismatch!")
+		t.FailNow()
+	}
+
+	ctmsgcp := mf2.Decrypt(sKA)
 	if ctmsgcp == nil {
 		fmt.Println("ctmsgcp is nil!")
 		t.FailNow()
@@ -71,42 +109,6 @@ func TestEncryptDecryptMessage(t *testing.T) {
 	fmt.Println("decrypted (", len(ptxtcp), " bytes) = ", string(ptxtcp))
 	if bytes.Compare(ptxt, ptxtcp) != 0 {
 		fmt.Println("TestEncryptDecryptMessage: Decrypt(Encrypt(msg)) != msg")
-		t.FailNow()
-	}
-}
-
-func TestMessageAttributes(t *testing.T) {
-	sKA := NewSecretKey(0, 0, 0, 0, 0)
-	sKB := NewSecretKey(0, 0, 0, 0, 0)
-	pKA := sKA.PublicKey()
-	//pKB := sKB.PublicKey()
-
-	ptxt := []byte("Hello, Alice")
-	fmt.Println("Encrypting \"" + string(ptxt) + "\"")
-	// base value = 10 + (1 / 65536)
-	prate := NewPostageRate(10, 65536, 1, (64 * 16777216))
-	//prate := NewPostageRate(0, 0, 0, 0)
-	ctmsg := EncryptMessage(pKA, sKB, time.Now(), time.Duration(7*24*time.Hour), "", ptxt, prate)
-	if ctmsg == nil {
-		fmt.Println("ctmsg is nil!")
-		t.FailNow()
-	}
-
-	if ctmsg.MessageTime().After(time.Now()) {
-		fmt.Println("message from the future!")
-		t.FailNow()
-	}
-	if time.Now().Sub(ctmsg.MessageTime()) > time.Duration(1*time.Second) {
-		fmt.Println("message from the distant past!")
-		t.FailNow()
-	}
-	if ctmsg.ExpireTime().Sub(ctmsg.MessageTime()) != time.Duration(7*24*time.Hour) {
-		fmt.Println("message TTL mismatch")
-		t.FailNow()
-	}
-	ctlen := uint64(len(ctmsg.Ciphertext()))
-	if ((ctmsg.PayloadBlocks() + 1) * 240) != ctlen {
-		fmt.Println("payload block length mismatch")
 		t.FailNow()
 	}
 }

@@ -39,7 +39,7 @@ package ctgo
 // #include <stdlib.h>
 //
 // ctMessage_ptr malloc_ctMessage() {
-//     return (ctMessage_ptr)malloc(sizeof(ctMessage_t));
+//     return (ctMessage_ptr)malloc(sizeof(_ctMessage_t));
 // }
 //
 // void free_ctMessage(ctMessage_ptr e) {
@@ -48,6 +48,11 @@ package ctgo
 //
 // unsigned char *unsafeptr_to_ucharptr(void *in);
 //
+// ctMessageHeader_ptr ctMessageHeader_adopt_bytes(unsigned char *mbytes);
+//
+// extern int _cgh_hashlen;
+// extern int _hdrlen;
+//
 import "C"
 
 import (
@@ -55,11 +60,11 @@ import (
 	//"encoding/base64"
 	//"encoding/hex"
 	//"encoding/binary"
-	//"errors"
+	"errors"
 	//"fmt"
-	//"io/ioutil"
+	"io/ioutil"
 	//"math/big"
-	//"os"
+	"os"
 	//"reflect"
 	"runtime"
 	//"strconv"
@@ -163,4 +168,41 @@ func (z *Message) Plaintext() []byte {
 		return nil
 	}
 	return C.GoBytes(unsafe.Pointer(ptxt), C.int(ptsz))
+}
+
+func (a *Message) WriteToFile(filename string) (z *MessageFile, err error) {
+	rdFile, err := os.Open(filename)
+	if err == nil {
+		rdFile.Close()
+		return nil, errors.New("WriteToFile: File Already Exists")
+	}
+
+	ct := a.Ciphertext()
+	err = ioutil.WriteFile(filename, ct, 0644)
+	if err != nil {
+		return nil, err
+	}
+	z = new(MessageFile)
+	cby := C.CBytes(ct[0:int(C._hdrlen)])
+	z.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
+	z.Size = uint64(len(ct))
+	z.ServerTime = time.Now()
+	z.Filename = filename
+	return z, nil
+}
+
+func (m *Message) MessageTime() (t time.Time) {
+	return UTimeToTime(m.m.hdr[0].msgtime_usec)
+}
+
+func (m *Message) ExpireTime() (t time.Time) {
+	return UTimeToTime(m.m.hdr[0].expire_usec)
+}
+
+func (m *Message) PayloadBlocks() (blocks uint64) {
+	return uint64(m.m.hdr[0].payload_blocks)
+}
+
+func (m *Message) PayloadHash() (h []byte) {
+	return C.GoBytes(unsafe.Pointer(&m.m.hdr[0].payload_hash[0]), C._cgh_hashlen)
 }
