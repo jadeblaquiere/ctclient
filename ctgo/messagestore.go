@@ -52,6 +52,10 @@ package ctgo
 //     return (ctMessageHeader_ptr)mbytes;
 // }
 //
+// unsigned char *ctMessageHeader_as_bytes(ctMessageHeader_ptr mh) {
+//     return (unsigned char *)mh;
+// }
+//
 // void free_ctMessageHeader(ctMessageHeader_ptr e) {
 //     free(e);
 // }
@@ -75,20 +79,37 @@ import "C"
 import (
 	//"bytes"
 	//"encoding/base64"
-	//"encoding/hex"
-	//"encoding/binary"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
-	//"fmt"
+	"fmt"
+	"github.com/btcsuite/goleveldb/leveldb"
+	"github.com/btcsuite/goleveldb/leveldb/util"
 	"io/ioutil"
 	//"math/big"
 	"os"
 	//"reflect"
 	"runtime"
 	//"strconv"
-	//"strings"
+	"strings"
+	"sync"
 	"time"
 	"unsafe"
 )
+
+const pruneMaxBatch = (32)
+
+var zeroHash []byte = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+
+var zeroTime []byte = []byte{0, 0, 0, 0, 0, 0, 0, 0}
+
+type MessageOrHeader interface {
+	MessageTime() time.Time
+	ExpireTime() time.Time
+	PayloadBlocks() uint64
+	PayloadHash() []byte
+}
 
 type MessageHeader struct {
 	// NOTE : inside MessageHeader the ctMessageHeader_t is in raw wire format
@@ -121,11 +142,11 @@ func NewMessageHeader(hbytes []byte) (h *MessageHeader) {
 	h = new(MessageHeader)
 	cby := C.CBytes(hbytes[0:int(C._hdrlen)])
 	h.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
-	runtime.SetFinalizer(h, header_clear)
+	runtime.SetFinalizer(h, clearMessageHeader)
 	return h
 }
 
-func header_clear(h *MessageHeader) {
+func clearMessageHeader(h *MessageHeader) {
 	C.free_ctMessageHeader(h.hdr)
 }
 
@@ -133,9 +154,9 @@ func header_clear(h *MessageHeader) {
 // generally treats the content as opaque data for performance.
 type MessageFile struct {
 	MessageHeader
-	Size       uint64
-	ServerTime time.Time
-	Filename   string
+	size       uint64
+	serverTime time.Time
+	filename   string
 }
 
 func NewMessageFile(filename string) (mf *MessageFile, err error) {
@@ -156,20 +177,314 @@ func NewMessageFile(filename string) (mf *MessageFile, err error) {
 	mf = new(MessageFile)
 	cby := C.CBytes(hbytes)
 	mf.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
-	mf.Size = uint64(finfo.Size())
-	mf.ServerTime = finfo.ModTime()
-	mf.Filename = filename
+	mf.size = uint64(finfo.Size())
+	mf.serverTime = finfo.ModTime()
+	mf.filename = filename
 	return mf, nil
 }
 
+func (a *MessageFile) Size() uint64 {
+	return a.size
+}
+
+func (a *MessageFile) ServerTime() time.Time {
+	return a.serverTime
+}
+
+func (a *MessageFile) Filename() string {
+	return a.filename
+}
+
 func (a *MessageFile) isSizeValid() (valid bool) {
-	return a.Size == ((a.MessageHeader.PayloadBlocks() + 1) * uint64(C._hdrlen))
+	return a.size == ((a.MessageHeader.PayloadBlocks() + 1) * uint64(C._hdrlen))
 }
 
 func (a *MessageFile) Decrypt(sK *SecretKey) (z *Message) {
-	ctext, err := ioutil.ReadFile(a.Filename)
+	ctext, err := ioutil.ReadFile(a.filename)
 	if err != nil {
 		return nil
 	}
 	return DecryptMessage(sK, ctext)
+}
+
+func (a *MessageFile) Ciphertext() []byte {
+	ctext, err := ioutil.ReadFile(a.filename)
+	if err != nil {
+		return nil
+	}
+	return ctext
+}
+
+func (a *MessageFile) Rename(newpath string) (err error) {
+	_, err = os.Stat(a.filename)
+	if err != nil {
+		return errors.New("MessageFile.Rename: File not found? Deleted out of band?")
+	}
+	_, err = os.Stat(newpath)
+	if err == nil {
+		return errors.New("MessageFile.Rename: New file already exists, cowardly refusing to overwrite")
+	}
+	err = os.Rename(a.filename, newpath)
+	if err != nil {
+		return errors.New("MessageFile.Rename: error renaming : " + err.Error())
+	}
+	a.filename = newpath
+	return nil
+}
+
+type MessageStore struct {
+	db      *leveldb.DB
+	rootdir string
+	count   int64
+	cchan   chan int
+	wg      sync.WaitGroup
+}
+
+// msCounter handles updating counter based on insert and delete actions
+// for MessageFile objects. All writes to the message count occur in this
+// goroutine, which serializes changes through a buffered channel, thereby
+// avoiding locks on the counter as only a single goroutine writes to the
+// counter
+func msCounter(ms *MessageStore) {
+	defer ms.wg.Done()
+	for {
+		select {
+		case x := <-ms.cchan:
+			if x == 0 {
+				return
+			}
+			ms.count += int64(x)
+		}
+	}
+}
+
+func OpenMessageStore(rootdir string) (ms *MessageStore, err error) {
+	finfo, err := os.Stat(rootdir)
+	if err != nil {
+		// error on stat, try creating dir
+		err = os.MkdirAll(rootdir, 0700)
+		if err != nil {
+			return nil, errors.New("cannot create root directory")
+		}
+		finfo, err = os.Stat(rootdir)
+		if err != nil {
+			return nil, errors.New("cannot stat created directoy")
+		}
+	}
+
+	if finfo.IsDir() != true {
+		return nil, errors.New("rootdir is not a directory")
+	}
+
+	db, err := leveldb.OpenFile(rootdir+"/msgdb", nil)
+	if err != nil {
+		return nil, errors.New("open DB failed : " + err.Error())
+	}
+
+	ms = new(MessageStore)
+	ms.db = db
+	ms.rootdir = rootdir
+	dbtag := append([]byte{0xFF}, zeroHash...)
+	dbcount, err := ms.db.Get(dbtag, nil)
+	if err == nil {
+		ms.count = int64(binary.LittleEndian.Uint64(dbcount))
+	} else {
+		ms.count = 0
+	}
+	ms.cchan = make(chan int, 256)
+	go msCounter(ms)
+	db.Delete(dbtag, nil)
+
+	for i := 0x000; i < 0x1000; i++ {
+		var phash [2]byte
+
+		phash[0] = byte((i >> 8) & 0xFF)
+		phash[1] = byte(i & 0xFF)
+		phstr := hex.EncodeToString(phash[:])
+		err = os.MkdirAll(rootdir+"/msg/"+phstr, 0700)
+		if err != nil {
+			ms.Close()
+			return nil, errors.New("unable to write directory: " + phstr)
+		}
+	}
+
+	return ms, nil
+}
+
+func (ms *MessageStore) Close() {
+	ms.wg.Add(1)
+	ms.cchan <- 0
+	ms.wg.Wait()
+	dbcount := make([]byte, 8)
+	binary.LittleEndian.PutUint64(dbcount[0:], uint64(ms.count))
+	dbtag := append([]byte{0xFF}, zeroHash...)
+	// ignore errors at this point as we're closing, so no recovery
+	ms.db.Put(dbtag, dbcount, nil)
+	ms.db.Close()
+	return
+}
+
+func (ms *MessageStore) RescanRecount() (err error) {
+	ecount := 0
+	// zero count
+	if ms.count != 0 {
+		ms.cchan <- int(-(ms.count))
+	}
+	for i := 0x000; i < 0x1000; i++ {
+		var phash [2]byte
+
+		phash[0] = byte((i >> 8) & 0xFF)
+		phash[1] = byte(i & 0xFF)
+		phstr := hex.EncodeToString(phash[:])
+		msgdir := ms.rootdir + "/msg/" + phstr
+		f, err := os.Open(msgdir)
+		if err != nil {
+			fmt.Println("unable to open directory: " + phstr)
+			ecount += 1
+			continue
+		}
+		names, err := f.Readdirnames(0)
+		for _, name := range names {
+			mf, err := NewMessageFile(msgdir + "/" + name)
+			if err != nil {
+				fmt.Println("error reading file: " + phstr + "/" + name)
+				ecount += 1
+				continue
+			}
+			ms.IngestMessageFile(mf)
+		}
+	}
+	if ecount > 0 {
+		return errors.New("RescanRecount: error count: " + string(ecount))
+	}
+	return nil
+}
+
+func (ms *MessageStore) msgPath(mh MessageOrHeader) string {
+	phash := mh.PayloadHash()
+	pdir := ms.rootdir + "/msg/0" + hex.EncodeToString(phash[:2])[0:3] + "/"
+	return pdir + hex.EncodeToString(phash[:])
+}
+
+type msgTags struct {
+	htag []byte
+	etag []byte
+}
+
+func (ms *MessageStore) msgTags(mh MessageOrHeader) (mt *msgTags) {
+	mhash := mh.PayloadHash()
+	etime := uint64(TimeToUTime(mh.ExpireTime()))
+	etbytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(etbytes[0:], etime)
+	mt = new(msgTags)
+	mt.htag = append([]byte{0x01}, mhash...)
+	mt.etag = append(append([]byte{0x02}, etbytes...), mhash...)
+	return mt
+}
+
+func (mf *MessageFile) dbSerialize() []byte {
+	chbytes := C.ctMessageHeader_as_bytes(mf.hdr)
+	ser1 := C.GoBytes(unsafe.Pointer(chbytes), C._hdrlen)
+	ser2 := make([]byte, 16)
+	binary.LittleEndian.PutUint64(ser2[0:], mf.size)
+	stime := uint64(TimeToUTime(mf.serverTime))
+	binary.LittleEndian.PutUint64(ser2[8:], stime)
+	return append(ser1, ser2...)
+}
+
+func (ms *MessageStore) IngestMessage(m *Message) (err error) {
+	mpath := ms.msgPath(m)
+	mf, err := m.WriteToFile(mpath)
+	if err != nil {
+		return errors.New("MessageStore.Ingest failed to write to file: " + err.Error())
+	}
+	return ms.insertMessageFile(mf)
+}
+
+func (ms *MessageStore) IngestMessageFile(mf *MessageFile) (err error) {
+	mpath := ms.msgPath(mf)
+	if strings.Compare(mpath, mf.filename) != 0 {
+		err = mf.Rename(mpath)
+		if err != nil {
+			return errors.New("MessageStore.IngestMessageFile rename failed: " + err.Error())
+		}
+	}
+	//fmt.Println("calling insert")
+	return ms.insertMessageFile(mf)
+}
+
+func (ms *MessageStore) insertMessageFile(mf *MessageFile) (err error) {
+	mt := ms.msgTags(mf)
+	mdata := mf.dbSerialize()
+	batch := new(leveldb.Batch)
+	batch.Put(mt.htag, mdata)
+	batch.Put(mt.etag, mdata)
+	err = ms.db.Write(batch, nil)
+	if err == nil {
+		ms.cchan <- 1
+	}
+	return err
+}
+
+func (ms *MessageStore) HasMessage(phash []byte) bool {
+	_, err := ms.db.Get(append([]byte{0x01}, phash...), nil)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func (ms *MessageStore) GetMessage(phash []byte) (mf *MessageFile) {
+	mdata, err := ms.db.Get(append([]byte{0x01}, phash...), nil)
+	if err != nil {
+		return nil
+	}
+	mf = new(MessageFile)
+	cby := C.CBytes(mdata[0:int(C._hdrlen)])
+	mf.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
+	mf.filename = ms.msgPath(mf)
+	mf.size = binary.LittleEndian.Uint64(mdata[int(C._hdrlen):])
+	stime := binary.LittleEndian.Uint64(mdata[int(C._hdrlen)+8:])
+	mf.serverTime = UTimeToTime(C.utime_t(stime))
+	return mf
+}
+
+func (ms *MessageStore) pruneExpired() (err error) {
+	now := uint64(TimeToUTime(time.Now()))
+	nowb := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nowb[8:], now)
+	// start of drop time = 0 (1 Jan 1970)
+	sdrop := append(append([]byte{0x02}, zeroTime...), zeroHash...)
+	// end of drop time = now
+	edrop := append(append([]byte{0x02}, nowb...), zeroHash...)
+	iter := ms.db.NewIterator(&util.Range{Start: sdrop, Limit: edrop}, nil)
+	ndrop := 0
+	batch := new(leveldb.Batch)
+	mf := new(MessageFile)
+	for iter.Next() {
+		val := iter.Value()
+		cby := C.CBytes(val[0:int(C._hdrlen)])
+		mf.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
+		mt := ms.msgTags(mf)
+		batch.Delete(mt.htag)
+		batch.Delete(mt.etag)
+		ndrop += 1
+		if ndrop == pruneMaxBatch {
+			err = ms.db.Write(batch, nil)
+			if err != nil {
+				return errors.New("MessageStore.pruneEpired: Write Error:" + err.Error())
+			}
+			ms.cchan <- ndrop
+			ndrop = 0
+			batch = new(leveldb.Batch)
+		}
+	}
+	if ndrop > 0 {
+		err := ms.db.Write(batch, nil)
+		if err != nil {
+			return errors.New("MessageStore.pruneEpired: Write Error:" + err.Error())
+		}
+		ms.cchan <- ndrop
+	}
+	return nil
 }

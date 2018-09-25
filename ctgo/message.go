@@ -185,9 +185,9 @@ func (a *Message) WriteToFile(filename string) (z *MessageFile, err error) {
 	z = new(MessageFile)
 	cby := C.CBytes(ct[0:int(C._hdrlen)])
 	z.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
-	z.Size = uint64(len(ct))
-	z.ServerTime = time.Now()
-	z.Filename = filename
+	z.size = uint64(len(ct))
+	z.serverTime = time.Now()
+	z.filename = filename
 	return z, nil
 }
 

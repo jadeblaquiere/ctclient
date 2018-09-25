@@ -35,6 +35,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -100,6 +101,11 @@ func TestWriteMessage(t *testing.T) {
 		t.FailNow()
 	}
 
+	if bytes.Compare(mf2.Ciphertext(), ctmsg.Ciphertext()) != 0 {
+		fmt.Println("Ciphertext mismatch!")
+		t.FailNow()
+	}
+
 	ctmsgcp := mf2.Decrypt(sKA)
 	if ctmsgcp == nil {
 		fmt.Println("ctmsgcp is nil!")
@@ -111,4 +117,51 @@ func TestWriteMessage(t *testing.T) {
 		fmt.Println("TestEncryptDecryptMessage: Decrypt(Encrypt(msg)) != msg")
 		t.FailNow()
 	}
+}
+
+func TestOpenMessageStore(t *testing.T) {
+	// force GC - ensure db is closed before opening
+	//runtime.GC()
+	ms, err := OpenMessageStore("mstore")
+	if err != nil {
+		fmt.Println("TestOpenMessageStore: OpenMessageStore Failed : ", err.Error())
+		t.FailNow()
+	}
+	ms.Close()
+}
+
+func TestMessageStoreIngestGet(t *testing.T) {
+	// force GC - ensure db is closed before opening
+	runtime.GC()
+	sK := make([]*SecretKey, 10)
+	pK := make([]*PublicKey, len(sK))
+	m := make([]*Message, len(sK)*len(sK))
+	for i := 0; i < len(sK); i++ {
+		sK[i] = NewSecretKey(0, 0, 0, 0, 0)
+		pK[i] = sK[i].PublicKey()
+	}
+
+	prate := NewPostageRate(10, 65536, 1, (64 * 16777216))
+	ptxt := []byte("Hello, Alice")
+
+	ms, err := OpenMessageStore("mstore")
+	if err != nil {
+		fmt.Println("TestMessageStoreIngestGet: OpenMessageStore Failed : ", err.Error())
+		t.FailNow()
+	}
+
+	for i := 0; i < len(sK); i++ {
+		for j := 0; j < len(sK); j++ {
+			if i == j {
+				continue
+			}
+			m[(i*len(sK))+j] = EncryptMessage(pK[j], sK[i], time.Now(), time.Duration(7*24*time.Hour), "", ptxt, prate)
+			err = ms.IngestMessage(m[(i*len(sK))+j])
+			if err != nil {
+				fmt.Println("TestMessageStoreIngestGet: ms.IngestMessage Failed : ", err.Error())
+				t.FailNow()
+			}
+		}
+	}
+	ms.Close()
 }
