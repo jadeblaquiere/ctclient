@@ -35,7 +35,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"runtime"
+	//"runtime"
 	"testing"
 	"time"
 )
@@ -120,8 +120,6 @@ func TestWriteMessage(t *testing.T) {
 }
 
 func TestOpenMessageStore(t *testing.T) {
-	// force GC - ensure db is closed before opening
-	//runtime.GC()
 	ms, err := OpenMessageStore("mstore")
 	if err != nil {
 		fmt.Println("TestOpenMessageStore: OpenMessageStore Failed : ", err.Error())
@@ -131,8 +129,6 @@ func TestOpenMessageStore(t *testing.T) {
 }
 
 func TestMessageStoreIngestGet(t *testing.T) {
-	// force GC - ensure db is closed before opening
-	runtime.GC()
 	sK := make([]*SecretKey, 10)
 	pK := make([]*PublicKey, len(sK))
 	m := make([]*Message, len(sK)*len(sK))
@@ -163,5 +159,78 @@ func TestMessageStoreIngestGet(t *testing.T) {
 			}
 		}
 	}
+	ms.Close()
+}
+
+func TestMessageStoreListInterval(t *testing.T) {
+	ms, err := OpenMessageStore("mstore")
+	if err != nil {
+		fmt.Println("TestMessageStoreListInterval: OpenMessageStore Failed : ", err.Error())
+		t.FailNow()
+	}
+
+	hlist, err := ms.ListHashesForInterval(UTimeToTime(0), time.Now())
+	if err != nil {
+		fmt.Println("TestMessageStoreListInterval: ListHashesForInterval Failed : ", err.Error())
+		t.FailNow()
+	}
+
+	if int64(len(hlist)) != ms.Count() {
+		fmt.Println("TestMessageStoreListInterval: Count mismatch : ", err.Error())
+		t.FailNow()
+	}
+
+	fmt.Printf("MS->listed %d messages\n", int(ms.Count()))
+
+	hm1 := hlist[(len(hlist)>>1)-1]
+	hm2 := hlist[(len(hlist)>>1)-1]
+
+	mf1 := ms.GetMessage(hm1)
+	mf2 := ms.GetMessage(hm2)
+
+	hl1, err := ms.ListHashesForInterval(UTimeToTime(0), mf1.MessageTime())
+	if err != nil {
+		fmt.Println("TestMessageStoreListInterval: ListHashesForInterval Failed : ", err.Error())
+		t.FailNow()
+	}
+
+	hl2, err := ms.ListHashesForInterval(mf2.MessageTime(), time.Now())
+	if err != nil {
+		fmt.Println("TestMessageStoreListInterval: ListHashesForInterval Failed : ", err.Error())
+		t.FailNow()
+	}
+
+	if (len(hl1) + len(hl2)) != len(hlist) {
+		fmt.Println("TestMessageStoreListInterval: Sublist length mismatch : ", err.Error())
+		t.FailNow()
+	}
+
+	hl1b := hlist[:len(hl1)]
+	hl2b := hlist[len(hl1):]
+
+	if len(hl1) != len(hl1b) {
+		fmt.Println("TestMessageStoreListInterval: Sublist length mismatch : ", err.Error())
+		t.FailNow()
+	}
+
+	if len(hl2) != len(hl2b) {
+		fmt.Println("TestMessageStoreListInterval: Sublist length mismatch : ", err.Error())
+		t.FailNow()
+	}
+
+	for i, hash := range hl1 {
+		if bytes.Compare(hash, hl1b[i]) != 0 {
+			fmt.Println("TestMessageStoreListInterval: hash list contents mismatch : ", err.Error())
+			t.FailNow()
+		}
+	}
+
+	for i, hash := range hl2 {
+		if bytes.Compare(hash, hl2b[i]) != 0 {
+			fmt.Println("TestMessageStoreListInterval: hash list contents mismatch : ", err.Error())
+			t.FailNow()
+		}
+	}
+
 	ms.Close()
 }

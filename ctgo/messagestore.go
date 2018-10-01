@@ -360,6 +360,10 @@ func (ms *MessageStore) RescanRecount() (err error) {
 	return nil
 }
 
+func (ms *MessageStore) Count() (c int64) {
+	return ms.count
+}
+
 func (ms *MessageStore) msgPath(mh MessageOrHeader) string {
 	phash := mh.PayloadHash()
 	pdir := ms.rootdir + "/msg/0" + hex.EncodeToString(phash[:2])[0:3] + "/"
@@ -452,7 +456,7 @@ func (ms *MessageStore) GetMessage(phash []byte) (mf *MessageFile) {
 func (ms *MessageStore) pruneExpired() (err error) {
 	now := uint64(TimeToUTime(time.Now()))
 	nowb := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nowb[8:], now)
+	binary.LittleEndian.PutUint64(nowb[0:], now)
 	// start of drop time = 0 (1 Jan 1970)
 	sdrop := append(append([]byte{0x02}, zeroTime...), zeroHash...)
 	// end of drop time = now
@@ -466,6 +470,7 @@ func (ms *MessageStore) pruneExpired() (err error) {
 		cby := C.CBytes(val[0:int(C._hdrlen)])
 		mf.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
 		mt := ms.msgTags(mf)
+		C.free(cby)
 		batch.Delete(mt.htag)
 		batch.Delete(mt.etag)
 		ndrop += 1
@@ -487,4 +492,26 @@ func (ms *MessageStore) pruneExpired() (err error) {
 		ms.cchan <- ndrop
 	}
 	return nil
+}
+
+func (ms *MessageStore) ListHashesForInterval(start, end time.Time) (hlist [][]byte, err error) {
+	startb := make([]byte, 8)
+	binary.LittleEndian.PutUint64(startb[0:], uint64(TimeToUTime(start)))
+	endb := make([]byte, 8)
+	binary.LittleEndian.PutUint64(endb[0:], uint64(TimeToUTime(end))+1)
+	stag := append(append([]byte{0x02}, startb...), zeroHash...)
+	etag := append(append([]byte{0x02}, endb...), zeroHash...)
+	iter := ms.db.NewIterator(&util.Range{Start: stag, Limit: etag}, nil)
+	hlist = [][]byte{}
+	mf := new(MessageFile)
+	for iter.Next() {
+		val := iter.Value()
+		cby := C.CBytes(val[0:int(C._hdrlen)])
+		mf.hdr = C.ctMessageHeader_adopt_bytes(C.unsafeptr_to_ucharptr(cby))
+		hlist = append(hlist, mf.PayloadHash())
+	}
+	if len(hlist) == 0 {
+		return nil, nil
+	}
+	return hlist, nil
 }
