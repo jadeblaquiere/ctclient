@@ -215,6 +215,14 @@ func (a *MessageFile) Ciphertext() []byte {
 	return ctext
 }
 
+func (a *MessageFile) CiphertextFile() (cfile *os.File, err error) {
+	cfile, err = os.Open(a.filename)
+	if err != nil {
+		return nil, errors.New("MessageFile.CiphertextFile: error opening file: " + err.Error())
+	}
+	return cfile, nil
+}
+
 func (a *MessageFile) Rename(newpath string) (err error) {
 	_, err = os.Stat(a.filename)
 	if err != nil {

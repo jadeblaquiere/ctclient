@@ -34,6 +34,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	//"runtime"
 	"testing"
@@ -117,6 +118,22 @@ func TestWriteMessage(t *testing.T) {
 		fmt.Println("TestEncryptDecryptMessage: Decrypt(Encrypt(msg)) != msg")
 		t.FailNow()
 	}
+
+	ctfile, err := mf2.CiphertextFile()
+	if err != nil {
+		fmt.Println("CiphertextFile failed to open!")
+		t.FailNow()
+	}
+
+	var ctbuf bytes.Buffer
+
+	io.Copy(&ctbuf, ctfile)
+
+	if bytes.Compare(ctmsg.Ciphertext(), ctbuf.Bytes()) != 0 {
+		fmt.Println("Ciphertext mismatch!")
+		t.FailNow()
+	}
+
 }
 
 func TestOpenMessageStore(t *testing.T) {
