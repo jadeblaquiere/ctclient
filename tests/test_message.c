@@ -125,6 +125,9 @@ START_TEST(test_encrypt_decrypt)
 
     ctext = ctMessage_init_Enc(m_e, b_pK, NULL, 0, 0, NULL, (unsigned char *)msg, strlen(msg), prate, &ctextsz);
     assert(ctext != NULL);
+    if (ctMessageHeader_is_valid(m_e->hdr) == 0) {
+        assert(0);
+    }
     status = ctMessage_init_Dec(m_d, b_sK, ctext, ctextsz);
     assert(status == 0);
     ptext = ctMessage_plaintext_ptr(m_d, &ptextsz);

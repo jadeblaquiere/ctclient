@@ -109,6 +109,9 @@ typedef struct {
 typedef _ctMessageHeader_t ctMessageHeader_t[1];
 typedef _ctMessageHeader_t *ctMessageHeader_ptr;
 
+// ctMessageHeader_is_valid return 1 on valid, 0 on invalid
+int ctMessageHeader_is_valid(ctMessageHeader_t hdr);
+
 typedef struct {
     _ed25519pk      SIG_point;
     uint64_t        msglen;

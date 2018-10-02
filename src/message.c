@@ -66,6 +66,29 @@ static char *_ct_msg_default_mime = "text/plain";
 // minimum message time-to-live - 2x default (2 weeks)
 #define _CT_MAXIMUM_MSG_TTL (2*_CT_DEFAULT_MSG_TTL)
 
+int ctMessageHeader_is_valid(ctMessageHeader_t hdr) {
+    utime_t now;
+    
+    // magic bytes - if these don't match it's not the correct data type
+    if (memcmp(hdr->magic, _ct_msg_magic, _CT_MAGIC_BYTES) != 0) {
+        return 0;
+    }
+    // so far only a single version
+    if (memcmp(hdr->version, _ct_msg_version, _CT_VERSION_BYTES) != 0) {
+        return 0;
+    }
+    now = getutime();
+    // check for messages from the future
+    if (now < hdr->msgtime_usec) {
+        return 0;
+    }
+    // check for expired
+    if (now > hdr->expire_usec) {
+        return 0;
+    }
+    return 1;
+}
+
 static unsigned char *_ctMessage_compose_preamble(ctMessage_t msg, size_t *psz) {
     uint32_t fsksz;
     unsigned char *preamble;
