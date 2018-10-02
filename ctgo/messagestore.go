@@ -52,6 +52,15 @@ package ctgo
 //     return (ctMessageHeader_ptr)mbytes;
 // }
 //
+//
+// void ctMessageHeader_copy_to_host(ctMessageHeader_ptr host, ctMessageHeader_ptr wire) {
+// 	   memcpy(host, wire, sizeof(_ctMessageHeader_t));
+// 	   host->msgtime_usec = le64toh(wire->msgtime_usec);
+//	   host->expire_usec = le64toh(wire->expire_usec);
+// 	   host->payload_blocks = le64toh(wire->payload_blocks);
+// 	   return;
+// }
+//
 // unsigned char *ctMessageHeader_as_bytes(ctMessageHeader_ptr mh) {
 //     return (unsigned char *)mh;
 // }
@@ -146,6 +155,15 @@ func NewMessageHeader(hbytes []byte) (h *MessageHeader) {
 	return h
 }
 
+func (m *MessageHeader) IsValid() bool {
+	var hcp C._ctMessageHeader_t
+	C.ctMessageHeader_copy_to_host(&hcp, m.hdr)
+	if C.ctMessageHeader_is_valid(&hcp) == 0 {
+		return false
+	}
+	return true
+}
+
 func clearMessageHeader(h *MessageHeader) {
 	C.free_ctMessageHeader(h.hdr)
 }
@@ -193,6 +211,13 @@ func (a *MessageFile) ServerTime() time.Time {
 
 func (a *MessageFile) Filename() string {
 	return a.filename
+}
+
+func (a *MessageFile) IsValid() bool {
+	if a.MessageHeader.IsValid() {
+		return a.isSizeValid()
+	}
+	return false
 }
 
 func (a *MessageFile) isSizeValid() (valid bool) {

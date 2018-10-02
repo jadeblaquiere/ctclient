@@ -71,6 +71,11 @@ func TestWriteMessage(t *testing.T) {
 		t.FailNow()
 	}
 
+	if mf.IsValid() != true {
+		fmt.Println("mf header fails validation!")
+		t.FailNow()
+	}
+
 	mf2, err := NewMessageFile(tfilename)
 	if err != nil {
 		fmt.Println("Error reading temp file!")
