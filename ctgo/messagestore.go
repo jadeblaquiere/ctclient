@@ -451,6 +451,9 @@ func (ms *MessageStore) IngestMessageFile(mf *MessageFile) (err error) {
 }
 
 func (ms *MessageStore) insertMessageFile(mf *MessageFile) (err error) {
+	if mf.IsValid() == false {
+		return errors.New("Refusing to Ingest malformed message")
+	}
 	mt := ms.msgTags(mf)
 	mdata := mf.dbSerialize()
 	batch := new(leveldb.Batch)
