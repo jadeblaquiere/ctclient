@@ -205,7 +205,7 @@ static unsigned char *_rest_get_body(ctConnection_t conn, char *resource, int *s
     sock = http_attach(sock);
     if (sock < 0) {errno = EPROTO; return NULL;}
 
-    printf("requesting resource %s\n", resource);
+    //printf("requesting resource %s\n", resource);
 
     int st = http_sendrequest(sock, "GET", resource, -1);
     if (st != 0) {errno = ENOENT; return NULL;}

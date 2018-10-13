@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     };
     //ctMessage_t ctM;
     //ctPostageRate_t pr;
-    int status;
+    //int status;
 
     // pc is the context for all popt-related functions
     pc = poptGetContext(NULL, argc, (const char **)argv, po, 0);

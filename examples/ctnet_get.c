@@ -44,7 +44,6 @@ int main(int argc, char **argv) {
     char *msgid = NULL;
     char *hostname = NULL;
     int port = 17764;
-    FILE *fPtr = stdin;
     poptContext pc;
     struct poptOption po[] = {
         {"msgid", 'm', POPT_ARG_STRING, &msgid, 0, "ID(hash) to retreive", "message ID"},

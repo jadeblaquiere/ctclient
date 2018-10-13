@@ -65,12 +65,12 @@ ctnak_spninfo_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
 
 ctnet_post_SOURCES = ctnet_post.c b64file.c
 ctnet_post_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
-ctnet_post_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+ctnet_post_LDADD = -L../src/.libs/ -lciphrtxt -ldill $(LDFLAGS)
 
 ctnet_list_SOURCES = ctnet_list.c
 ctnet_list_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
-ctnet_list_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+ctnet_list_LDADD = -L../src/.libs/ -lciphrtxt -ldill $(LDFLAGS)
 
 ctnet_get_SOURCES = ctnet_get.c b64file.c
 ctnet_get_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
-ctnet_get_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+ctnet_get_LDADD = -L../src/.libs/ -lciphrtxt -ldill $(LDFLAGS)
