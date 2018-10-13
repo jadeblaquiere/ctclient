@@ -48,7 +48,7 @@ extern "C" {
 #define _CT_MAGIC_BYTES     (3)
 #define _CT_VERSION_BYTES   (5)
 
-/* Implementation of ciphrtxt  */ 
+/* Implementation of ciphrtxt  */
 
 // Message = (Header) || (Payload)
 //
@@ -71,7 +71,7 @@ extern "C" {
 // Fields with A prefix are authenticated in AEAD
 // Fields with S prefix are signed by EdDSA Signature
 
-// Preamble = Len(FSKey) (4 bytes) || FSKey (?? Bytes) || Encryption Nonce 
+// Preamble = Len(FSKey) (4 bytes) || FSKey (?? Bytes) || Encryption Nonce
 // the preamble is authenticated in AEAD
 //
 // AEAD_Data = Header[0x00:0x80] || Preamble
@@ -151,12 +151,12 @@ typedef _ctMessage_t  *ctMessage_ptr;
 
 // encrypt a plaintext message for a single recipient toK. toK, plaintext and p_sz
 // are required inputs. If fromK is NULL, a random origination address will be
-// used (resulting in an anonymous message). If timestamp is 0, the current 
+// used (resulting in an anonymous message). If timestamp is 0, the current
 // system time will be used (converted to UTC as all times are UTC in ciphrtxt)
 // the resulting message is signed and stored in msg. if ttl is zero the default
 // ttl (1 week) will be used. If mime is NULL then the default (text/plain) will
 // be used.
-unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKey_t fromK, 
+unsigned char *ctMessage_init_Enc(ctMessage_t msg, ctPublicKey_t toK, ctSecretKey_t fromK,
   utime_t timestamp, utime_t ttl, char *mime, unsigned char *plaintext,
   size_t p_sz, ctPostageRate_t rate, size_t *sz);
 
@@ -181,11 +181,11 @@ int ctMessage_rehash(ctMessage_t msg, ctPostageRate_t rate);
 // return a pointer and length for the message plaintext.
 unsigned char *ctMessage_plaintext_ptr(ctMessage_t msg, size_t *ptsz);
 
-// return a pointer and length for the message plaintext. The mime type is 
+// return a pointer and length for the message mime type. The mime type is 
 // null terminated and expected to contain ascii text
 char *ctMessage_mime_ptr(ctMessage_t msg, size_t *mimesz);
 
-// return a pointer and length for the message plaintext. 
+// return a pointer and length for the message ciphertext.
 unsigned char *ctMessage_ciphertext_ptr(ctMessage_t msg, size_t *ctsz);
 
 #ifdef __cplusplus

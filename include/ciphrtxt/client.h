@@ -28,15 +28,36 @@
 //OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef _CIPHRTXT_H_INCLUDED_
-#define _CIPHRTXT_H_INCLUDED_
+#ifndef _CIPHRTXT_CLIENT_H_INCLUDED_
+#define _CIPHRTXT_CLIENT_H_INCLUDED_
 
-#include <ciphrtxt/client.h>
-#include <ciphrtxt/keys.h>
-#include <ciphrtxt/message.h>
-#include <ciphrtxt/nak.h>
-#include <ciphrtxt/postage.h>
 #include <ciphrtxt/rawmessage.h>
-#include <ciphrtxt/utime.h>
+#include <libdill.h>
 
-#endif // _CIPHRTXT_H_INCLUDED_
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
+    char *host;
+    struct ipaddr addr;
+} _ctConnection_t;
+
+typedef _ctConnection_t ctConnection_t[1];
+typedef _ctConnection_t *ctConnection_ptr;
+
+int ctConnection_init(ctConnection_t conn, char *host, int port);
+void ctConnection_clear(ctConnection_t conn);
+
+char **ctConnection_get_message_ids(ctConnection_t conn, int *count);
+ctMessageFile_ptr ctConnection_get_message(ctConnection_t conn, char *msgid, char *filename);
+unsigned char *ctConnection_get_messagectxt(ctConnection_t conn, char *msgid, size_t *ctsz);
+int ctConnection_post_message(ctConnection_t conn, ctMessage_t m);
+int ctConnection_post_messagefile(ctConnection_t conn, ctMessageFile_t mf);
+int ctConnection_post_messagectxt(ctConnection_t conn, unsigned char *ctext, size_t ctsz);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _CIPHRTXT_CLIENT_H_INCLUDED_

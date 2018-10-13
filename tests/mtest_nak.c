@@ -39,7 +39,7 @@
 #include <string.h>
 #include <time.h>
 
-void main(void) {
+int main(void) {
     ctNAKSecretKey_t sN;
     ctNAKPublicKey_t pN;
     ctNAKAuthChallenge_t ch;
@@ -131,7 +131,7 @@ void main(void) {
 
         status = ctNAKAuthResponse_init(rs, ch, &(c_sN[i]));
         assert(status == 0);
-        
+
         buffer = ctNAKAuthResponse_export_DER(rs, &bsz);
         assert(buffer != NULL);
 
@@ -145,7 +145,7 @@ void main(void) {
 
         status = ctNAKAuthResponse_init_import_DER(rs_cp, buffer, bsz);
         assert(status == 0);
-        
+
         assert(mpECP_cmp(rs->session_pK, rs_cp->session_pK) == 0);
         assert(mpECP_cmp(rs->ctxt->C, rs_cp->ctxt->C) == 0);
         assert(mpECP_cmp(rs->ctxt->D, rs_cp->ctxt->D) == 0);
@@ -174,4 +174,6 @@ void main(void) {
     mpFp_clear(session_sK);
     ctNAKPublicKey_clear(pN);
     ctNAKSecretKey_clear(sN);
+
+    return 0;
 }

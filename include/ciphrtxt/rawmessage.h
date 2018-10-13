@@ -28,15 +28,44 @@
 //OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef _CIPHRTXT_H_INCLUDED_
-#define _CIPHRTXT_H_INCLUDED_
+#ifndef _CIPHRTXT_RAWMSG_H_INCLUDED_
+#define _CIPHRTXT_RAWMSG_H_INCLUDED_
 
-#include <ciphrtxt/client.h>
-#include <ciphrtxt/keys.h>
 #include <ciphrtxt/message.h>
-#include <ciphrtxt/nak.h>
-#include <ciphrtxt/postage.h>
-#include <ciphrtxt/rawmessage.h>
 #include <ciphrtxt/utime.h>
 
-#endif // _CIPHRTXT_H_INCLUDED_
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
+    ctMessageHeader_t hdr;
+    unsigned char *payload;
+    size_t psz;
+} _ctRawMessage_t;
+
+typedef _ctRawMessage_t ctRawMessage_t[1];
+typedef _ctRawMessage_t *ctRawMessage_ptr;
+
+typedef struct {
+    ctMessageHeader_t hdr;
+    size_t msz;
+    utime_t serverTime;
+    char *filename;
+} _ctMessageFile_t;
+
+typedef _ctMessageFile_t ctMessageFile_t[1];
+typedef _ctMessageFile_t *ctMessageFile_ptr;
+
+ctMessageFile_ptr ctMessage_write_to_file(ctMessage_t msg, char *filename);
+ctMessageFile_ptr ctMessageFile_read_from_file(char *filename);
+
+unsigned char *ctMessageFile_ciphertext(ctMessageFile_t mf, size_t *ctsz);
+
+void ctMessageFile_clear(ctMessageFile_t mf);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _CIPHRTXT_RAWMSG_H_INCLUDED_

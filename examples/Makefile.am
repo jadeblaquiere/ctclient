@@ -1,6 +1,7 @@
 noinst_PROGRAMS = ctkey_gen ctkey_pub ctkey_der ctkey_skinfo ctkey_pkinfo \
     ctmsg_enc ctmsg_dec ctmsg_info ctmsg_rehash ctnak_gen ctnak_pub \
-    ctnak_sninfo ctnak_pninfo ctnak_signpub ctnak_spninfo
+    ctnak_sninfo ctnak_pninfo ctnak_signpub ctnak_spninfo ctnet_post \
+    ctnet_list ctnet_get
 
 ctkey_gen_SOURCES = ctkey_gen.c b64file.c
 ctkey_gen_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
@@ -61,3 +62,15 @@ ctnak_signpub_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
 ctnak_spninfo_SOURCES = ctnak_spninfo.c b64file.c
 ctnak_spninfo_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
 ctnak_spninfo_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnet_post_SOURCES = ctnet_post.c b64file.c
+ctnet_post_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnet_post_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnet_list_SOURCES = ctnet_list.c
+ctnet_list_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnet_list_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)
+
+ctnet_get_SOURCES = ctnet_get.c b64file.c
+ctnet_get_CFLAGS = -Wall -I ../include -I $(prefix)/include/pbc $(CFLAGS)
+ctnet_get_LDADD = -L../src/.libs/ -lciphrtxt $(LDFLAGS)

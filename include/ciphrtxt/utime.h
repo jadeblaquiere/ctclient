@@ -39,7 +39,7 @@
 extern "C" {
 #endif
 
-/* Handling and conversions for time in microseconds */ 
+/* Handling and conversions for time in microseconds */
 
 typedef int64_t utime_t;
 
@@ -55,6 +55,9 @@ void tm_from_utime(struct tm *tm, utime_t utm);
 
 utime_t utime_from_time_t(time_t tmt);
 time_t time_t_from_utime(utime_t utm);
+
+utime_t utime_from_timespec(struct timespec *ts);
+void timespec_from_utime(struct timespec *ts, utime_t utm);
 
 // formatted i/o for utime
 

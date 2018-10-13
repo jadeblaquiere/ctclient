@@ -116,6 +116,15 @@ time_t time_t_from_utime(utime_t utm) {
     return (time_t)(utm / (1000000));
 }
 
+utime_t utime_from_timespec(struct timespec *ts) {
+    return utime_from_time_t(ts->tv_sec) + ((ts->tv_nsec)/1000);
+}
+
+void timespec_from_utime(struct timespec *ts, utime_t utm) {
+    ts->tv_sec = time_t_from_utime(utm);
+    ts->tv_nsec = (utm % (1000000)) * 1000;
+}
+
 size_t utime_strftime(char *s, size_t max, char *format, utime_t utm) {
     char *fmt;
     char *qtag;
@@ -124,13 +133,13 @@ size_t utime_strftime(char *s, size_t max, char *format, utime_t utm) {
     size_t rsz;
 
     tm_from_utime(&tm, utm);
-    
+
     fmt = (char *)malloc(strlen(format)+1);
     strcpy(fmt, format);
 
     qtag = strstr(fmt, "%Q");
     if (qtag == NULL) return strftime(s, max, format, &tm);
-    
+
     *qtag = 0;
     sz = strftime(s, max, fmt, &tm);
     *qtag = '%';

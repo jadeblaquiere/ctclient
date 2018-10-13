@@ -29,57 +29,83 @@
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <ciphrtxt/utime.h>
-#include <gmp.h>
-#include <inttypes.h>
-#include <math.h>
+#include <ciphrtxt/client.h>
 #include <check.h>
-#include <sodium.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <time.h>
+#include <unistd.h>
 
-START_TEST(test_time_conversions)
-    utime_t utm;
-    utime_t utm_sec;
+START_TEST(test_init_client)
+    ctConnection_t conn;
 
-    utm = getutime();
-    utm_sec = (utm / (1000000)) * (1000000);
+    ctConnection_init(conn, "127.0.0.1", 17764);
 
-    struct tm tm;
-    tm_from_utime(&tm, utm);
-    assert(utm_sec == utime_from_tm(&tm));
+    int msgCount;
+    char **msgIDs = ctConnection_get_message_ids(conn, &msgCount);
+    assert(msgIDs != NULL);
+    printf("received %d message IDs:\n", msgCount);
+    for (int i = 0; i < msgCount; i++) {
+        printf("%s\n", msgIDs[i]);
 
-    time_t tt;
-    tt = time_t_from_utime(utm);
-    assert(utm_sec == utime_from_time_t(tt));
+        char *tmpnm = "/message";
+        assert(strlen(msgIDs[i]) == 64);
+        size_t psz = strlen(P_tmpdir) + strlen(tmpnm) + strlen(msgIDs[i]) + 1;
+        char *tmpfile = (char *)malloc(psz*sizeof(char));
+        strcpy(tmpfile, P_tmpdir);
+        strcat(tmpfile, tmpnm);
+        strcat(tmpfile, msgIDs[i]);
+        assert(strlen(tmpfile) > 0);
 
-    struct timespec ts;
-    timespec_from_utime(&ts, utm);
-    assert(utm == utime_from_timespec(&ts));
+        printf("writing to %s\n", tmpfile);
+        ctMessageFile_ptr mf = ctConnection_get_message(conn, msgIDs[i], tmpfile);
+        assert(mf != NULL);
+        unlink(tmpfile);
+    }
+
+    ctConnection_clear(conn);
 END_TEST
 
-START_TEST(test_utime_strftime)
-    utime_t utm;
-    char buffer[80];
-    size_t sz;
+START_TEST(test_post_message)
+    ctMessage_t m;
+    ctSecretKey_t a_sK;
+    ctSecretKey_t b_sK;
+    ctPublicKey_t b_pK;
+    ctPostageRate_t prate;
+    char *msg = "Hello Bob!";
+    unsigned char *ctext;
+    size_t ctextsz;
 
-    utm = getutime();
-    sz = utime_strftime(buffer, 80, "%a %b %d %T.%Q %Z %Y", utm);
-    printf("%s\n", buffer);
-    assert(sz > 0);
+    // base value = 10 + (1 / 65536)
+    prate->base_whole = 10;
+    prate->base_fraction = (65536U);
+    // block rate = 1 + 1 / 4
+    prate->l2blocks_whole = 1;
+    prate->l2blocks_fraction = (64 * 16777216U);
+
+    ctSecretKey_init_Gen(a_sK, 0, 0, 0, 0, 0);
+
+    ctSecretKey_init_Gen(b_sK, 0, 0, 0, 0, 0);
+    ctPublicKey_init_ctSecretKey(b_pK, b_sK);
+
+    ctext = ctMessage_init_Enc(m, b_pK, a_sK, 0, 0, NULL, (unsigned char *)msg, strlen(msg), prate, &ctextsz);
+    assert(ctext != NULL);
+
+    ctConnection_t conn;
+    ctConnection_init(conn, "127.0.0.1", 17764);
+    int status = ctConnection_post_message(conn, m);
+    assert(status == 0);
+
+    ctMessage_clear(m);
 END_TEST
 
 static Suite *mpCT_test_suite(void) {
     Suite *s;
     TCase *tc;
 
-    s = suite_create("Ciphrtxt message interface");
-    tc = tcase_create("time");
+    s = suite_create("Ciphrtxt key interface");
+    tc = tcase_create("client");
 
-    tcase_add_test(tc, test_time_conversions);
-    tcase_add_test(tc, test_utime_strftime);
+    tcase_add_test(tc, test_init_client);
+    tcase_add_test(tc, test_post_message);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);

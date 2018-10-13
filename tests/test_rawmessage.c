@@ -29,7 +29,10 @@
 //OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <ciphrtxt/utime.h>
+#include <ciphrtxt/keys.h>
+#include <ciphrtxt/message.h>
+#include <ciphrtxt/postage.h>
+#include <ciphrtxt/rawmessage.h>
 #include <gmp.h>
 #include <inttypes.h>
 #include <math.h>
@@ -37,38 +40,69 @@
 #include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
 #include <time.h>
+#include <unistd.h>
 
-START_TEST(test_time_conversions)
-    utime_t utm;
-    utime_t utm_sec;
+START_TEST(test_write_read)
+    ctMessage_t m_e, m_d;
+    ctMessageFile_ptr mf_e, mf_d;
+    ctSecretKey_t a_sK;
+    ctSecretKey_t b_sK;
+    ctPublicKey_t b_pK;
+    ctPostageRate_t prate;
+    char *msg = "Hello Bob!";
+    unsigned char *ptext;
+    size_t ptextsz;
+    unsigned char *ctext;
+    size_t ctextsz;
+    int status;
 
-    utm = getutime();
-    utm_sec = (utm / (1000000)) * (1000000);
+    // base value = 10 + (1 / 65536)
+    prate->base_whole = 10;
+    prate->base_fraction = (65536U);
+    // block rate = 1 + 1 / 4
+    prate->l2blocks_whole = 1;
+    prate->l2blocks_fraction = (64 * 16777216U);
 
-    struct tm tm;
-    tm_from_utime(&tm, utm);
-    assert(utm_sec == utime_from_tm(&tm));
+    ctSecretKey_init_Gen(a_sK, 0, 0, 0, 0, 0);
 
-    time_t tt;
-    tt = time_t_from_utime(utm);
-    assert(utm_sec == utime_from_time_t(tt));
+    ctSecretKey_init_Gen(b_sK, 0, 0, 0, 0, 0);
+    ctPublicKey_init_ctSecretKey(b_pK, b_sK);
 
-    struct timespec ts;
-    timespec_from_utime(&ts, utm);
-    assert(utm == utime_from_timespec(&ts));
-END_TEST
+    ctext = ctMessage_init_Enc(m_e, b_pK, NULL, 0, 0, NULL, (unsigned char *)msg, strlen(msg), prate, &ctextsz);
+    assert(ctext != NULL);
+    if (ctMessageHeader_is_valid(m_e->hdr) == 0) {
+        assert(0);
+    }
 
-START_TEST(test_utime_strftime)
-    utime_t utm;
-    char buffer[80];
-    size_t sz;
+    // {TMPDIR}/messageXXXXXX{NULL}
+    char *tmpnm = "/messageXXXXXX";
+    size_t psz = strlen(P_tmpdir) + strlen(tmpnm) + 1;
+    char *tmpfile = (char *)malloc(psz*sizeof(char));
+    strcpy(tmpfile, P_tmpdir);
+    strcat(tmpfile, tmpnm);
+    mktemp(tmpfile);
+    assert(strlen(tmpfile) > 0);
 
-    utm = getutime();
-    sz = utime_strftime(buffer, 80, "%a %b %d %T.%Q %Z %Y", utm);
-    printf("%s\n", buffer);
-    assert(sz > 0);
+    printf("writing to %s\n", tmpfile);
+    mf_e = ctMessage_write_to_file(m_e, tmpfile);
+    assert(mf_e != NULL);
+    mf_d = ctMessageFile_read_from_file(tmpfile);
+    assert(mf_d != NULL);
+
+    size_t ctsz = 0;
+    unsigned char *ct = ctMessageFile_ciphertext(mf_d, &ctsz);
+    assert(ct != NULL);
+    assert(ctsz == ctextsz);
+    assert(memcmp(ctext, ct, ctsz) == 0);
+
+    status = ctMessage_init_Dec(m_d, b_sK, ct, ctsz);
+    assert(status == 0);
+    ptext = ctMessage_plaintext_ptr(m_d, &ptextsz);
+    assert(ptextsz == strlen(msg));
+    assert(0 == strncmp(msg, (char *)ptext, ptextsz));
+
+    assert(unlink(tmpfile) == 0);
 END_TEST
 
 static Suite *mpCT_test_suite(void) {
@@ -76,10 +110,9 @@ static Suite *mpCT_test_suite(void) {
     TCase *tc;
 
     s = suite_create("Ciphrtxt message interface");
-    tc = tcase_create("time");
+    tc = tcase_create("rawmessage");
 
-    tcase_add_test(tc, test_time_conversions);
-    tcase_add_test(tc, test_utime_strftime);
+    tcase_add_test(tc, test_write_read);
 
      // set no timeout instead of default 4
     tcase_set_timeout(tc, 0.0);
