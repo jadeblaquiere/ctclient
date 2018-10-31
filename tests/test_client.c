@@ -43,7 +43,8 @@ START_TEST(test_init_client)
     char **msgIDs = ctConnection_get_message_ids(conn, &msgCount);
     assert(msgIDs != NULL);
     printf("received %d message IDs:\n", msgCount);
-    for (int i = 0; i < msgCount; i++) {
+    int i;
+    for (i = 0; i < msgCount; i++) {
         printf("%s\n", msgIDs[i]);
 
         char *tmpnm = "/message";
